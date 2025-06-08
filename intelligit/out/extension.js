@@ -61,10 +61,12 @@ function activate(context) {
           switch (message.command) {
             case "helloFromWebview":
               vscode.window.showInformationMessage(`Received: ${message.text}`);
-              panel.webview.postMessage({
+              const responsePayload = {
                 command: "responseFromExtension",
                 payload: "Hello back from the extension! (Received: " + message.text + ")"
-              });
+              };
+              console.log("[IntelliGit] Posting message back to webview:", responsePayload);
+              panel.webview.postMessage(responsePayload);
               return;
           }
         },
@@ -123,25 +125,55 @@ function getWebviewContent(webview, extensionUri, appUrl) {
             const iframe = document.getElementById('appFrame');
             const targetOrigin = new URL("${appUrl}").origin;
 
-            // Relay messages from iframe to extension
-            window.addEventListener('message', event => {
-                if (event.source === iframe.contentWindow && event.origin === targetOrigin) {
-                    console.log('[WebviewHost] Message from iframe:', event.data);
-                    vscode.postMessage(event.data);
-                }
-            });
+            console.log('[WebviewHost] Relay script loaded. Target origin for iframe:', targetOrigin);
 
-            // Relay messages from extension to iframe
-            window.addEventListener('message', event => {
-                // Check if the message is from the extension itself (not from the iframe)
-                // Simple check: if event.source is window (meaning it's from panel.webview.postMessage)
-                // and not from the iframe.
-                if (event.source === window && iframe.contentWindow) {
-                     console.log('[WebviewHost] Message from extension:', event.data);
-                    iframe.contentWindow.postMessage(event.data, targetOrigin);
+            window.addEventListener('message', (eventAsAny) => {
+                const event = eventAsAny; // Using as any for simplicity in inline script
+
+                // Log ALL messages received by this window (the webview host page)
+                console.log('[WebviewHost] Raw message received by host page:', {
+                    data: event.data,
+                    origin: event.origin,
+                    sourceIsWindow: event.source === window,
+                    sourceIsIframeContentWindow: event.source === iframe.contentWindow,
+                });
+
+                // Case 1: Message from iframe, destined for the extension
+                if (event.source === iframe.contentWindow && event.origin === targetOrigin) {
+                    console.log('[WebviewHost] Processing as: Message from iframe (to extension):', event.data);
+                    if (event.data && event.data.command) {
+                        vscode.postMessage(event.data);
+                    } else {
+                        console.warn('[WebviewHost] Message from iframe missing command:', event.data);
+                    }
+                }
+                // Case 2: Message from extension (panel.webview.postMessage), destined for the iframe
+                // This condition handles messages that are NOT from the iframe but are intended for it.
+                // We rely on the fact that if it's not from the iframe (checked above), and it has a command,
+                // it's from the extension host. The origin will be the webview's own origin.
+                else if (event.data && event.data.command) {
+                    // This block will now handle messages from the extension.
+                    // We know event.source is not iframe.contentWindow here (due to the first 'if').
+                    // We also know event.origin is not targetOrigin (iframe's origin) for these messages.
+                    console.log('[WebviewHost] Processing as: Potential message from extension (not from iframe, has command). Data:', event.data, 'Origin:', event.origin);
+                    
+                    console.log('[WebviewHost] Confirmed message for iframe. Relaying to iframe. TargetOrigin:', targetOrigin, 'Iframe contentWindow exists:', !!iframe.contentWindow);
+                    if (iframe.contentWindow) {
+                        try {
+                            iframe.contentWindow.postMessage(event.data, targetOrigin);
+                            console.log('[WebviewHost] Message successfully posted to iframe:', event.data);
+                        } catch (e) {
+                            console.error('[WebviewHost] Error posting message to iframe:', e, 'Data:', event.data, 'TargetOrigin:', targetOrigin);
+                        }
+                    } else {
+                        console.warn('[WebviewHost] iframe.contentWindow is null. Cannot post message to iframe.');
+                    }
+                }
+                // Case 3: Log if not handled by above (e.g., no command, or unexpected source/origin)
+                else {
+                    console.log('[WebviewHost] Message not processed by primary handlers (e.g., no command, or unexpected source/origin). Data:', event.data, 'Origin:', event.origin);
                 }
             });
-            console.log('[WebviewHost] Relay script loaded.');
         </script>
     </body>
     </html>`;
