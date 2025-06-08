@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { exec } from 'child_process'; // Added for executing shell commands
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -27,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Handle messages from the webview (relayed by the script in getWebviewContent)
             panel.webview.onDidReceiveMessage(
-                message => {
+                async message => { // Made async to handle exec promise
                     console.log('[IntelliGit] Message received from webview:', message);
                     switch (message.command) {
                         case 'helloFromWebview':
@@ -36,8 +37,90 @@ export function activate(context: vscode.ExtensionContext) {
                                 command: 'responseFromExtension',
                                 payload: 'Hello back from the extension! (Received: ' + message.text + ')'
                             };
-                            console.log('[IntelliGit] Posting message back to webview:', responsePayload); // Added log
+                            console.log('[IntelliGit] Posting message back to webview:', responsePayload);
                             panel.webview.postMessage(responsePayload);
+                            return;
+                        case 'getGitLog':
+                            console.log('[IntelliGit] Received getGitLog request from webview.');
+                            const workspaceFolders = vscode.workspace.workspaceFolders;
+                            if (!workspaceFolders || workspaceFolders.length === 0) {
+                                console.error('[IntelliGit] No workspace folder open.');
+                                panel.webview.postMessage({ command: 'gitLogResponse', payload: [], error: 'No workspace folder open.' });
+                                return;
+                            }
+                            const workspacePath = workspaceFolders[0].uri.fsPath;
+                            console.log(`[IntelliGit] Workspace path: ${workspacePath}`);
+
+                            // Using a complex format with null character as separator for fields, and a unique record separator.
+                            // Fields: hash, author name, author email, committer date (ISO8601 strict), subject, body, parent hashes, ref names (decorations)
+                            // Field separator: \x1F (Unit Separator)
+                            // Record separator: \0 (NUL character, implicitly from -z)
+                            const fieldSeparator = '\x1F';
+                            const gitLogFormat = ["%H", "%an", "%ae", "%cI", "%s", "%b", "%P", "%D"].join(fieldSeparator);
+                            // The -z option makes git output NUL-terminated records.
+                            const gitLogCommand = `git log --pretty=format:"${gitLogFormat}" --date=iso-strict --decorate=full -z --max-count=50`;
+                            
+                            console.log(`[IntelliGit] Executing command: ${gitLogCommand} in ${workspacePath}`);
+
+                            exec(gitLogCommand, { cwd: workspacePath, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
+                                if (error) {
+                                    console.error(`[IntelliGit] Error executing git log: ${error.message}`);
+                                    console.error(`[IntelliGit] Git log stderr: ${stderr}`);
+                                    panel.webview.postMessage({ command: 'gitLogResponse', payload: [], error: `Failed to get git log: ${stderr || error.message}` });
+                                    return;
+                                }
+                                if (stderr) {
+                                    // Sometimes git might output warnings to stderr even on success, log it but proceed.
+                                    console.warn(`[IntelliGit] Git log stderr (non-fatal): `, stderr);
+                                }
+
+                                console.log(`[IntelliGit] Git log stdout raw length: ${stdout.length}`);
+                                
+                                // Log character codes for detailed analysis of NUL and other separators
+                                const charCodes = stdout.split('').map(c => c.charCodeAt(0));
+                                console.log('[IntelliGit] Raw stdout char codes (first 350):', charCodes.slice(0, 350).join(', '));
+                                if (charCodes.length > 350) {
+                                    console.log('[IntelliGit] (stdout has more char codes...)');
+                                }
+
+                                try {
+                                    // stdout is a single string with NUL-separated commit records.
+                                    // Each record contains fieldSeparator-separated fields.
+                                    const commitRecords = stdout.trimEnd().split('\0');
+                                    console.log(`[IntelliGit] Number of commit records (split by NUL): ${commitRecords.length}`);
+
+                                    // If the last element is an empty string (often happens with -z and split), remove it.
+                                    if (commitRecords.length > 0 && commitRecords[commitRecords.length - 1] === '') {
+                                        commitRecords.pop();
+                                        console.log(`[IntelliGit] Number of commit records after pop: ${commitRecords.length}`);
+                                    }
+                                    
+                                    console.log('[IntelliGit] Content of commitRecords (first 5):', JSON.stringify(commitRecords.slice(0, 5), null, 2));
+
+                                    const commits = commitRecords.map(record => {
+                                        const fields = record.split(fieldSeparator);
+                                        return {
+                                            hash: fields[0] || '',
+                                            authorName: fields[1] || '',
+                                            authorEmail: fields[2] || '',
+                                            date: fields[3] || '',
+                                            subject: fields[4] || '',
+                                            body: fields[5] || '', 
+                                            parents: fields[6] ? fields[6].split(' ').filter(p => p) : [],
+                                            refs: fields[7] || '' 
+                                        };
+                                    }).filter(commit => commit.hash); // Ensure we only keep commits that have a hash
+
+                                    console.log('[IntelliGit] Parsed commits count:', commits.length);
+                                    if (commits.length > 0) {
+                                        console.log('[IntelliGit] First parsed commit:', JSON.stringify(commits[0], null, 2));
+                                    }
+                                    panel.webview.postMessage({ command: 'gitLogResponse', payload: commits });
+                                } catch (parseError: any) {
+                                    console.error('[IntelliGit] Error parsing git log output:', parseError);
+                                    panel.webview.postMessage({ command: 'gitLogResponse', payload: [], error: `Error parsing git log: ${parseError.message}` });
+                                }
+                            });
                             return;
                     }
                 },

@@ -35,6 +35,7 @@ __export(extension_exports, {
 });
 module.exports = __toCommonJS(extension_exports);
 var vscode = __toESM(require("vscode"));
+var import_child_process = require("child_process");
 function activate(context) {
   console.log("[IntelliGit] Activating extension...");
   try {
@@ -56,7 +57,7 @@ function activate(context) {
       const appUrl = "http://localhost:9002";
       panel.webview.html = getWebviewContent(panel.webview, context.extensionUri, appUrl);
       panel.webview.onDidReceiveMessage(
-        (message) => {
+        async (message) => {
           console.log("[IntelliGit] Message received from webview:", message);
           switch (message.command) {
             case "helloFromWebview":
@@ -67,6 +68,68 @@ function activate(context) {
               };
               console.log("[IntelliGit] Posting message back to webview:", responsePayload);
               panel.webview.postMessage(responsePayload);
+              return;
+            case "getGitLog":
+              console.log("[IntelliGit] Received getGitLog request from webview.");
+              const workspaceFolders = vscode.workspace.workspaceFolders;
+              if (!workspaceFolders || workspaceFolders.length === 0) {
+                console.error("[IntelliGit] No workspace folder open.");
+                panel.webview.postMessage({ command: "gitLogResponse", payload: [], error: "No workspace folder open." });
+                return;
+              }
+              const workspacePath = workspaceFolders[0].uri.fsPath;
+              console.log(`[IntelliGit] Workspace path: ${workspacePath}`);
+              const fieldSeparator = "";
+              const gitLogFormat = ["%H", "%an", "%ae", "%cI", "%s", "%b", "%P", "%D"].join(fieldSeparator);
+              const gitLogCommand = `git log --pretty=format:"${gitLogFormat}" --date=iso-strict --decorate=full -z --max-count=50`;
+              console.log(`[IntelliGit] Executing command: ${gitLogCommand} in ${workspacePath}`);
+              (0, import_child_process.exec)(gitLogCommand, { cwd: workspacePath, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
+                if (error) {
+                  console.error(`[IntelliGit] Error executing git log: ${error.message}`);
+                  console.error(`[IntelliGit] Git log stderr: ${stderr}`);
+                  panel.webview.postMessage({ command: "gitLogResponse", payload: [], error: `Failed to get git log: ${stderr || error.message}` });
+                  return;
+                }
+                if (stderr) {
+                  console.warn(`[IntelliGit] Git log stderr (non-fatal): `, stderr);
+                }
+                console.log(`[IntelliGit] Git log stdout raw length: ${stdout.length}`);
+                const charCodes = stdout.split("").map((c) => c.charCodeAt(0));
+                console.log("[IntelliGit] Raw stdout char codes (first 350):", charCodes.slice(0, 350).join(", "));
+                if (charCodes.length > 350) {
+                  console.log("[IntelliGit] (stdout has more char codes...)");
+                }
+                try {
+                  const commitRecords = stdout.trimEnd().split("\0");
+                  console.log(`[IntelliGit] Number of commit records (split by NUL): ${commitRecords.length}`);
+                  if (commitRecords.length > 0 && commitRecords[commitRecords.length - 1] === "") {
+                    commitRecords.pop();
+                    console.log(`[IntelliGit] Number of commit records after pop: ${commitRecords.length}`);
+                  }
+                  console.log("[IntelliGit] Content of commitRecords (first 5):", JSON.stringify(commitRecords.slice(0, 5), null, 2));
+                  const commits = commitRecords.map((record) => {
+                    const fields = record.split(fieldSeparator);
+                    return {
+                      hash: fields[0] || "",
+                      authorName: fields[1] || "",
+                      authorEmail: fields[2] || "",
+                      date: fields[3] || "",
+                      subject: fields[4] || "",
+                      body: fields[5] || "",
+                      parents: fields[6] ? fields[6].split(" ").filter((p) => p) : [],
+                      refs: fields[7] || ""
+                    };
+                  }).filter((commit) => commit.hash);
+                  console.log("[IntelliGit] Parsed commits count:", commits.length);
+                  if (commits.length > 0) {
+                    console.log("[IntelliGit] First parsed commit:", JSON.stringify(commits[0], null, 2));
+                  }
+                  panel.webview.postMessage({ command: "gitLogResponse", payload: commits });
+                } catch (parseError) {
+                  console.error("[IntelliGit] Error parsing git log output:", parseError);
+                  panel.webview.postMessage({ command: "gitLogResponse", payload: [], error: `Error parsing git log: ${parseError.message}` });
+                }
+              });
               return;
           }
         },

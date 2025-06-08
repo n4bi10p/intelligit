@@ -1,58 +1,92 @@
 "use client"; // This is a client component
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
-const WebviewMessenger = () => {
-    const [messageFromExtension, setMessageFromExtension] = useState<string>('');
+interface VsCodeMessage {
+    command: string;
+    payload?: any;
+    text?: string; // For existing helloFromWebview
+    error?: string; // To handle errors from extension
+}
+
+export interface Commit {
+    hash: string;
+    authorName: string;
+    authorEmail: string;
+    date: string;
+    subject: string;
+    body: string;
+    parents: string[];
+    refs: string;
+}
+
+interface WebviewMessengerProps {
+    onGitLogDataReceived: (logData: Commit[], error?: string) => void;
+    // Add other props if WebviewMessenger needs to send other types of messages
+    // and receive corresponding data.
+}
+
+const WebviewMessenger: React.FC<WebviewMessengerProps> = ({ onGitLogDataReceived }) => {
+    const [testResponse, setTestResponse] = useState<string>(''); // For the test button
+
+    const sendMessageToExtension = useCallback((message: VsCodeMessage) => {
+        console.log('[IntelliGit-UI] Sending message to parent (extension host):', message);
+        window.parent.postMessage(message, '*'); // '*' is okay for local dev, be more specific for production
+    }, []);
 
     useEffect(() => {
-        const handleMessage = (event: MessageEvent) => {
-            // Ensure the message is from a trusted source (e.g., the extension's webview host)
-            // For simplicity, we'll check if it has a command. In a real app, validate event.origin.
+        // Send a message to get the git log when the component mounts
+        sendMessageToExtension({ command: 'getGitLog' });
+
+        const handleMessage = (event: MessageEvent<VsCodeMessage>) => {
             const message = event.data;
-            if (message && message.command) {
-                console.log('[Webview] Message received from extension host:', message);
+            console.log('[IntelliGit-UI] Message received from parent (extension host or relay):', message);
+
+            // It's good practice to check the origin of the message for security
+            if (event.origin.startsWith('vscode-webview://')) { // Ensure message is from our webview host
                 switch (message.command) {
-                    case 'responseFromExtension':
-                        setMessageFromExtension(message.payload);
+                    case 'responseFromExtension': // This is for the test "hello" message
+                        // Ensure payload is a string or handle appropriately
+                        if (typeof message.payload === 'string') {
+                            setTestResponse(message.payload);
+                        } else if (message.payload && typeof message.payload === 'object') {
+                            setTestResponse(JSON.stringify(message.payload));
+                        } else {
+                            setTestResponse('Received non-string payload for responseFromExtension');
+                        }
                         break;
+                    case 'gitLogResponse':
+                        console.log('[IntelliGit-UI] Received gitLogResponse:', message.payload, 'Error:', message.error);
+                        if (message.error) {
+                            onGitLogDataReceived([], message.error);
+                        } else {
+                            onGitLogDataReceived(message.payload as Commit[] || [], undefined);
+                        }
+                        break;
+                    default:
+                        console.log('[IntelliGit-UI] Unknown command received:', message.command);
                 }
             } else {
-                // console.log('[Webview] Ignoring message from unknown source or malformed message:', event);
+                // console.warn('[IntelliGit-UI] Ignoring message from unexpected origin:', event.origin, message);
             }
         };
 
         window.addEventListener('message', handleMessage);
-
-        // Cleanup listener when component unmounts
         return () => {
             window.removeEventListener('message', handleMessage);
         };
-    }, []);
+    }, [sendMessageToExtension, onGitLogDataReceived]);
 
-    const handleSendMessageToExtension = () => {
-        // Post the message to the parent window (the webview host page).
-        // The relay script in the parent window will forward it to the extension.
-        // '*' as targetOrigin is permissive; in production, you might restrict it.
-        // The relay script in extension.ts should validate the origin of messages it receives from the iframe.
-        window.parent.postMessage({
-            command: 'helloFromWebview',
-            text: 'Hello from the Next.js UI!'
-        }, '*'); 
-        console.log('[Webview] Message sent to parent window (extension host).');
+    const handleSendHelloTest = () => {
+        sendMessageToExtension({ command: 'helloFromWebview', text: 'Test message from UI' });
     };
 
+    // This component is mostly for communication, so its UI can be minimal or hidden.
+    // The button below is just for testing the basic message roundtrip.
     return (
-        <div style={{ padding: '20px', border: '1px solid #ccc', margin: '20px' }}>
-            <h3>Webview Messenger Test</h3>
-            <button onClick={handleSendMessageToExtension} style={{ padding: '10px', marginRight: '10px' }}>
-                Send Message to Extension
-            </button>
-            {messageFromExtension && (
-                <p style={{ marginTop: '10px', color: 'blue', border: '1px dashed blue', padding: '10px' }}>
-                    <strong>Response from extension:</strong> {messageFromExtension}
-                </p>
-            )}
+        <div style={{ display: 'none' }}> {/* Hidden as it's a background worker */}
+            <button onClick={handleSendHelloTest}>Test Send Hello</button>
+            {testResponse && <p>Test Response: {testResponse}</p>}
         </div>
     );
 };

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -6,12 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GitFork, UploadCloud, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
-import { ActivityFeed } from './activity-feed';
+import { ActivityFeed } from '@/app/components/activity-feed';
 import { TasksBoard } from './tasks-board';
 import { CodeChat } from './code-chat';
 import { AiRefactor } from './ai-refactor';
+import { Commit } from '@/components/WebviewMessenger'; // Import the Commit interface
 
-export function MainPanel() {
+interface MainPanelProps {
+  gitLog: Commit[]; // Define the gitLog prop
+}
+
+export function MainPanel({ gitLog }: MainPanelProps) { // Destructure gitLog from props
+  console.log('[MainPanel - src/components/main-panel.tsx] Received gitLog prop with length:', gitLog?.length);
   const [syncStatus, setSyncStatus] = React.useState<'idle' | 'syncing' | 'synced'>('synced');
   const [currentBranch, setCurrentBranch] = React.useState('main');
 
@@ -63,7 +68,7 @@ export function MainPanel() {
           <TabsTrigger value="ai-refactor" className="text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">AI Refactor</TabsTrigger>
         </TabsList>
         <TabsContent value="activity" className="flex-1 overflow-auto mt-0">
-          <ActivityFeed />
+          <ActivityFeed gitLog={gitLog} />
         </TabsContent>
         <TabsContent value="tasks" className="flex-1 overflow-auto mt-0">
           <TasksBoard />
