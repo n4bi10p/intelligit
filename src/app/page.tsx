@@ -1,6 +1,6 @@
-
 import { CollabSidebar } from '@/components/collab-sidebar';
 import { MainPanel } from '@/components/main-panel';
+import WebviewMessenger from '@/components/WebviewMessenger';
 
 export default function CodeCollabAIPage() {
   return (
@@ -9,6 +9,7 @@ export default function CodeCollabAIPage() {
         <CollabSidebar />
         <MainPanel />
       </main>
+      <WebviewMessenger />
     </div>
   );
 }
