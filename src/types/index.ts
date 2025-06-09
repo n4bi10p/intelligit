@@ -1,4 +1,3 @@
-
 export interface Collaborator {
   id: string;
   name: string;
@@ -17,12 +16,27 @@ export interface Activity {
 
 export type TaskStatus = 'To Do' | 'In Progress' | 'Done';
 
+export interface Subtask {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+export interface Attachment {
+  name: string;
+  url: string;
+}
+
 export interface Task {
   id: string;
   title: string;
   status: TaskStatus;
   assignee?: Pick<Collaborator, 'name' | 'avatarUrl' | 'avatarHint'>;
   priority?: 'low' | 'medium' | 'high';
+  description?: string;
+  subtasks?: Subtask[];
+  dueDate?: string;
+  attachments?: Attachment[];
 }
 
 export interface ChatMessage {
