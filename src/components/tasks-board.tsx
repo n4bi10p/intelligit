@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { mockTasks, mockCollaborators } from '@/lib/mock-data';
 import type { Task, TaskStatus } from '@/types';
-import { UserCircle, GripVertical, PlusCircle, Edit3, Trash2 } from 'lucide-react'; // Added Edit3, Trash2
+import { UserCircle, GripVertical, PlusCircle, Edit3, Trash2 } from 'lucide-react'; // Removed SettingsIcon
 import {
   DndContext,
   DragOverlay,
@@ -433,12 +433,9 @@ export function TasksBoard(): JSX.Element {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Main Dialog for Add Task - this structure might need slight adjustment if we have multiple top-level dialogs */}
-      {/* For simplicity, we'll manage dialogs separately or ensure only one is "controlled" by the DndContext wrapper if it causes issues */}
-      {/* It's generally better to have Dialogs outside DndContext or ensure their open state doesn't interfere. */}
-      {/* Let's assume for now the existing Dialog for add task is fine, and we add others similarly. */}
-      
-      <div className="p-4 flex space-x-4 h-full overflow-x-auto">
+      {/* The header containing the SettingsIcon button has been removed. */}
+      {/* Main content area for columns directly under DndContext or a simplified wrapper */}
+      <div className="p-4 flex space-x-4 flex-grow overflow-x-auto h-full">
         {columnNames.map(status => (
           <TaskColumn
             key={status}
@@ -447,10 +444,11 @@ export function TasksBoard(): JSX.Element {
             onAddTask={status === 'To Do' ? handleOpenAddTaskDialog : undefined}
             onEditTask={handleOpenEditTaskDialog}
             onDeleteTask={handleOpenDeleteConfirmDialog}
-            onViewTask={handleOpenViewTaskDialog}
+            onViewTask={handleOpenViewTaskDialog} 
           />
         ))}
       </div>
+
       <DragOverlay>
         {/* For the overlay, edit/delete don't make sense, so pass empty functions or disable buttons if preferred */}
         {activeTask ? <DraggableTaskCard task={activeTask} isOverlay onEditTask={() => {}} onDeleteTask={() => {}} /> : null}
@@ -588,7 +586,7 @@ export function TasksBoard(): JSX.Element {
             <DialogClose asChild>
               <Button type="button" variant="outline" onClick={() => setIsAddTaskDialogOpen(false)}>Cancel</Button>
             </DialogClose>
-            <Button type="submit" onClick={handleAddNewTask}>Add Task</Button>
+            <Button type="button" onClick={handleAddNewTask}>Add Task</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

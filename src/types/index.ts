@@ -52,3 +52,28 @@ export interface CodeDiscussion {
   language: string;
   messages: ChatMessage[];
 }
+
+export interface TaskStatusObject {
+  id: string;
+  name: TaskStatus;
+  tasks: Task[];
+}
+
+export interface Contributor {
+  id: number; // GitHub user ID
+  login: string; // GitHub username
+  name?: string; // Display name (often same as login or null from contributors API)
+  avatar_url?: string;
+  html_url?: string; // Link to GitHub profile
+  apiUrl: string; // API URL to fetch full user details, e.g., https://api.github.com/users/{login}
+  contributions?: number;
+}
+
+export interface Branch {
+  name: string;
+  commit: {
+    sha: string;
+    url: string;
+  };
+  protected: boolean;
+}
