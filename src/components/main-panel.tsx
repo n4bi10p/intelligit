@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GitFork, UploadCloud, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
 import { ActivityFeed } from '@/app/components/activity-feed';
 import { TasksBoard } from './tasks-board';
-import { CodeChat } from './code-chat';
+import { CodeChat } from './code-chat'; // Or the correct path
 import { AiRefactor } from './ai-refactor';
 import { Commit } from '@/components/WebviewMessenger'; // Import the Commit interface
 

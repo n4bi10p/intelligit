@@ -1,4 +1,3 @@
-
 import type { Collaborator, Activity, Task, CodeDiscussion, TaskStatus } from '@/types';
 import { GitCommit, MessageCircle, CheckCircle, UserCircle } from 'lucide-react';
 
@@ -53,9 +52,9 @@ export const mockTasks: Task[] = [
 
 export const mockCodeDiscussions: CodeDiscussion[] = [
   {
-    id: '1',
-    codeSnippet: `function greet(name) {\n  return "Hello, " + name + "!";\n}`,
-    language: 'javascript',
+    id: 'cd1',
+    language: 'TypeScript',
+    codeSnippet: `function example() {\n  console.log("Hello world");\n}`,
     messages: [
       { id: 'm1', user: mockCollaborators[0], content: "Should we add type checking here?", timestamp: "10:00 AM" },
       { id: 'm2', user: mockCollaborators[2], content: "Good idea. TypeScript or JSDoc?", timestamp: "10:05 AM" },
@@ -64,6 +63,7 @@ export const mockCodeDiscussions: CodeDiscussion[] = [
   },
   {
     id: '2',
+    fileName: 'styles.css',
     codeSnippet: `.button {\n  color: white;\n  background-color: blue;\n  padding: 10px 20px;\n}`,
     language: 'css',
     messages: [
