@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -60,9 +59,10 @@ const CodeDiscussionItem: React.FC<{ discussion: CodeDiscussion }> = ({ discussi
             <ChatMessageItem key={msg.id} message={msg} />
           ))}
         </div>
+        
         <div className="flex items-center space-x-2">
           <Textarea
-            placeholder="Type your message..."
+            placeholder={"Type your message..."}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             className="flex-1 bg-[hsl(var(--input))] text-foreground focus:ring-primary min-h-[40px]"
@@ -74,7 +74,11 @@ const CodeDiscussionItem: React.FC<{ discussion: CodeDiscussion }> = ({ discussi
               }
             }}
           />
-          <Button size="icon" onClick={handleSendMessage} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button
+            size="icon"
+            onClick={handleSendMessage}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
             <Send className="h-4 w-4" />
           </Button>
         </div>
