@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 
-interface VsCodeMessage {
+export interface VsCodeMessage { // Added export
     command: string;
     payload?: any;
     text?: string; // For existing helloFromWebview
