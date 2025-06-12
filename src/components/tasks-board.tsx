@@ -13,12 +13,13 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { mockTasks, mockCollaborators } from '@/lib/mock-data';
-import type { Task, TaskStatus } from '@/types';
-import { UserCircle, GripVertical, PlusCircle, Edit3, Trash2 } from 'lucide-react'; // Removed SettingsIcon
+import { mockTasks } from '@/lib/mock-data';
+import type { Task, TaskStatus, Contributor, TaskAssignee } from '@/types';
+import { UserCircle, GripVertical, PlusCircle, Edit3, Trash2, CalendarDays, Paperclip, CheckSquare, Square } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -192,7 +193,12 @@ const TaskColumn: React.FC<TaskColumnProps> = ({ status, tasks, onAddTask, onEdi
   );
 };
 
-export function TasksBoard(): JSX.Element {
+// Add contributors to props
+interface TasksBoardProps {
+  contributors: Contributor[];
+}
+
+export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
   const columnNames: TaskStatus[] = ['To Do', 'In Progress', 'Done'];
   const [tasks, setTasks] = useState<Task[]>(mockTasks);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -254,37 +260,58 @@ export function TasksBoard(): JSX.Element {
 
   const handleAddNewTask = () => {
     if (!newTaskTitle.trim()) return;
-    const assignee = mockCollaborators.find(c => c.id === newTaskAssigneeId);
+    const selectedContributor = contributors.find(c => c.login === newTaskAssigneeId);
+    let assigneeForTask: TaskAssignee | undefined = undefined;
+    if (selectedContributor) {
+      assigneeForTask = {
+        login: selectedContributor.login,
+        name: selectedContributor.name || selectedContributor.login,
+        avatarUrl: selectedContributor.avatar_url,
+      };
+    }
+
     const newTask: Task = {
-      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: nanoid(), 
       title: newTaskTitle.trim(),
       description: newTaskDescription.trim(),
       status: newTaskStatus,
-      assignee: assignee ? { name: assignee.name, avatarUrl: assignee.avatarUrl, avatarHint: assignee.avatarHint } : undefined,
+      assignee: assigneeForTask,
       subtasks: newTaskSubtasks,
       dueDate: newTaskDueDate ? newTaskDueDate : undefined,
+      attachments: newTaskAttachments.length > 0 ? newTaskAttachments : undefined,
     };
-    setTasks(prevTasks => [newTask, ...prevTasks.filter(t => t.status !== newTaskStatus), ...prevTasks.filter(t => t.status === newTaskStatus)]);
-    // Place new task at the beginning of its column's list
+    
     setTasks(prevTasks => {
-        const newListOfTasks = [newTask, ...prevTasks];
-        // Correctly reorder: new task at the top of its designated column, others preserved.
-        const columnTasks = newListOfTasks.filter(t => t.status === newTaskStatus);
-        const otherTasks = newListOfTasks.filter(t => t.status !== newTaskStatus);
-        const reorderedColumnTasks = [newTask, ...columnTasks.filter(t => t.id !== newTask.id)];
+        // Create a new list with the new task added
+        const updatedTasks = [newTask, ...prevTasks];
         
-        // Reconstruct tasks ensuring new task is first in its status group
-        const finalTasks: Task[] = [];
-        columnNames.forEach(colName => {
-            if (colName === newTaskStatus) {
-                finalTasks.push(...reorderedColumnTasks);
-            } else {
-                finalTasks.push(...otherTasks.filter(t => t.status === colName));
+        // This part is tricky. We want to ensure the new task is at the top of its column,
+        // and the overall order of columns (To Do, In Progress, Done) is maintained,
+        // and tasks within other columns maintain their relative order.
+
+        const tasksByStatus: Record<TaskStatus, Task[]> = {
+            'To Do': [],
+            'In Progress': [],
+            'Done': [],
+        };
+
+        // Add the new task to its designated status column first
+        tasksByStatus[newTaskStatus].push(newTask);
+
+        // Then add existing tasks, ensuring no duplicates and maintaining order within status
+        prevTasks.forEach(task => {
+            if (task.id !== newTask.id) { // Avoid duplicating the new task if it was somehow in prevTasks
+                tasksByStatus[task.status].push(task);
             }
         });
-         // Filter out duplicates that might arise from previous logic
-        const uniqueTasks = Array.from(new Set(finalTasks.map(t => t.id))).map(id => finalTasks.find(t => t.id === id)!);
-        return uniqueTasks;
+
+        // Combine tasks from all columns in the desired order
+        let finalOrderedTasks: Task[] = [];
+        columnNames.forEach(status => {
+            finalOrderedTasks = finalOrderedTasks.concat(tasksByStatus[status]);
+        });
+
+        return finalOrderedTasks;
     });
 
     setNewTaskTitle('');
@@ -300,9 +327,7 @@ export function TasksBoard(): JSX.Element {
     setEditingTask(task);
     setEditedTaskTitle(task.title);
     setEditedTaskDescription(task.description || '');
-    setEditedTaskAssigneeId(
-      mockCollaborators.find(c => c.name === task.assignee?.name)?.id || ''
-    );
+    setEditedTaskAssigneeId(task.assignee?.login || '_unassigned_'); // Changed from ''
     setEditedTaskSubtasks(task.subtasks ? [...task.subtasks] : []);
     setEditedTaskDueDate(task.dueDate ? task.dueDate.substring(0, 10) : '');
     setEditedTaskAttachments(task.attachments ? [...task.attachments] : []);
@@ -322,10 +347,29 @@ export function TasksBoard(): JSX.Element {
 
   const handleSaveEditedTask = () => {
     if (!editingTask || !editedTaskTitle.trim()) return;
-    const assignee = mockCollaborators.find(c => c.id === editedTaskAssigneeId);
+    const selectedContributor = contributors.find(c => c.login === editedTaskAssigneeId);
+    let assigneeForTask: TaskAssignee | undefined = undefined;
+    if (selectedContributor) {
+      assigneeForTask = {
+        login: selectedContributor.login,
+        name: selectedContributor.name || selectedContributor.login,
+        avatarUrl: selectedContributor.avatar_url,
+      };
+    }
+
     setTasks(prevTasks => 
       prevTasks.map(task => 
-        task.id === editingTask.id ? { ...task, title: editedTaskTitle.trim(), description: editedTaskDescription.trim(), assignee: assignee ? { name: assignee.name, avatarUrl: assignee.avatarUrl, avatarHint: assignee.avatarHint } : undefined, subtasks: editedTaskSubtasks, dueDate: editedTaskDueDate ? editedTaskDueDate : undefined, attachments: editedTaskAttachments } : task
+        task.id === editingTask.id 
+          ? { 
+              ...task, 
+              title: editedTaskTitle.trim(), 
+              description: editedTaskDescription.trim(), 
+              assignee: assigneeForTask, 
+              subtasks: editedTaskSubtasks, 
+              dueDate: editedTaskDueDate ? editedTaskDueDate : undefined, 
+              attachments: editedTaskAttachments.length > 0 ? editedTaskAttachments : undefined,
+            } 
+          : task
       )
     );
     handleCloseEditTaskDialog();
@@ -459,6 +503,7 @@ export function TasksBoard(): JSX.Element {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Task to {newTaskStatus}</DialogTitle>
+            <DialogDescription>Fill in the details below to create a new task.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
@@ -515,28 +560,27 @@ export function TasksBoard(): JSX.Element {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="add-task-assignee" className="text-right">
-                Contributor
+                Assignee
               </Label>
-              <div className="col-span-3">
-                <Select value={newTaskAssigneeId} onValueChange={setNewTaskAssigneeId}>
-                  <SelectTrigger id="add-task-assignee" className="w-full">
-                    <SelectValue placeholder="Select Contributor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mockCollaborators.map(user => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex items-center space-x-2">
-                          <Avatar className="h-5 w-5">
-                            <AvatarImage src={user.avatarUrl} alt={user.name} />
-                            <AvatarFallback>{user.name[0]}</AvatarFallback>
-                          </Avatar>
-                          <span>{user.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={newTaskAssigneeId} onValueChange={setNewTaskAssigneeId}>
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_unassigned_">Unassigned</SelectItem>
+                  {contributors.map(contributor => (
+                    <SelectItem key={contributor.login} value={contributor.login}>
+                      <div className="flex items-center">
+                        <Avatar className="h-6 w-6 mr-2">
+                          <AvatarImage src={contributor.avatar_url} alt={contributor.login} />
+                          <AvatarFallback>{(contributor.name || contributor.login).substring(0, 1).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        {contributor.name || contributor.login}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="add-task-due-date" className="text-right">Due Date</Label>
@@ -595,9 +639,11 @@ export function TasksBoard(): JSX.Element {
       <Dialog open={isEditTaskDialogOpen} onOpenChange={setIsEditTaskDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Task</DialogTitle>
+            <DialogTitle>Edit Task: {editingTask?.title}</DialogTitle>
+            <DialogDescription>Update the details for this task.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Edit Task Title Input */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-task-title" className="text-right">
                 Title
@@ -607,9 +653,9 @@ export function TasksBoard(): JSX.Element {
                 value={editedTaskTitle}
                 onChange={(e) => setEditedTaskTitle(e.target.value)}
                 className="col-span-3"
-                placeholder="Enter task title"
               />
             </div>
+            {/* Edit Task Description Textarea */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-task-description" className="text-right">
                 Description
@@ -622,6 +668,32 @@ export function TasksBoard(): JSX.Element {
                 placeholder="Enter task description"
               />
             </div>
+            {/* Edit Task Assignee Select */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-task-assignee" className="text-right">
+                Assignee
+              </Label>
+              <Select value={editedTaskAssigneeId} onValueChange={setEditedTaskAssigneeId}>
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_unassigned_">Unassigned</SelectItem>
+                  {contributors.map(contributor => (
+                    <SelectItem key={contributor.login} value={contributor.login}>
+                      <div className="flex items-center">
+                        <Avatar className="h-6 w-6 mr-2">
+                          <AvatarImage src={contributor.avatar_url} alt={contributor.login} />
+                          <AvatarFallback>{(contributor.name || contributor.login).substring(0, 1).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        {contributor.name || contributor.login}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Edit Task Subtasks */}
             <div className="grid grid-cols-4 items-start gap-4">
               <Label className="text-right pt-2">Subtasks</Label>
               <div className="col-span-3 space-y-2">
@@ -648,31 +720,6 @@ export function TasksBoard(): JSX.Element {
                 <Button type="button" size="sm" variant="outline" onClick={() => setEditedTaskSubtasks(subs => [...subs, { id: nanoid(), title: '', completed: false }])}>
                   + Add Subtask
                 </Button>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-task-assignee" className="text-right">
-                Contributor
-              </Label>
-              <div className="col-span-3">
-                <Select value={editedTaskAssigneeId} onValueChange={setEditedTaskAssigneeId}>
-                  <SelectTrigger id="edit-task-assignee" className="w-full">
-                    <SelectValue placeholder="Select Contributor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mockCollaborators.map(user => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex items-center space-x-2">
-                          <Avatar className="h-5 w-5">
-                            <AvatarImage src={user.avatarUrl} alt={user.name} />
-                            <AvatarFallback>{user.name[0]}</AvatarFallback>
-                          </Avatar>
-                          <span>{user.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -731,9 +778,12 @@ export function TasksBoard(): JSX.Element {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the task "{deletingTask?.title}"? This action cannot be undone.
+            </DialogDescription>
           </DialogHeader>
-          <p className="py-4">Are you sure you want to delete the task "{deletingTask?.title}"?</p>
-          <DialogFooter>
+          {/* <p className="py-4">Are you sure you want to delete the task "{deletingTask?.title}"?</p> */}
+          <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={handleCloseDeleteConfirmDialog}>Cancel</Button>
             <Button type="button" variant="destructive" onClick={handleConfirmDeleteTask}>Delete Task</Button>
           </DialogFooter>
@@ -742,62 +792,93 @@ export function TasksBoard(): JSX.Element {
 
       {/* View Task Dialog */}
       <Dialog open={isViewTaskDialogOpen} onOpenChange={setIsViewTaskDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Task Details</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-lg">
           {viewingTask && (
-            <div className="grid gap-4 py-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">Title</Label>
-                <div className="text-base font-semibold text-foreground mt-1">{viewingTask.title}</div>
-              </div>
-              {viewingTask.description && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-semibold">{viewingTask.title}</DialogTitle>
+                <DialogDescription>
+                  Viewing details for task: {viewingTask.title}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Description</Label>
-                  <div className="text-sm text-foreground mt-1 whitespace-pre-line">{viewingTask.description}</div>
+                  <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                  <p className={`mt-1 text-sm px-2 py-0.5 rounded-full inline-block border ${statusColors[viewingTask.status]}`.replace('border-', 'bg-').replace('-500', '-100 text-') + statusColors[viewingTask.status].replace('border', 'text')}>
+                    {viewingTask.status}
+                  </p>
                 </div>
-              )}
-              {viewingTask.subtasks && viewingTask.subtasks.length > 0 && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Subtasks</Label>
-                  <div className="flex flex-col gap-1 mt-1">
-                    {viewingTask.subtasks.map((subtask, idx) => (
-                      <div key={subtask.id} className="flex items-center gap-2">
-                        <input type="checkbox" checked={subtask.completed} readOnly />
-                        <span className={`text-sm ${subtask.completed ? 'line-through text-muted-foreground' : ''}`}>{subtask.title}</span>
-                      </div>
-                    ))}
+
+                {viewingTask.assignee && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Assignee</Label>
+                    <div className="mt-1 flex items-center space-x-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={viewingTask.assignee.avatarUrl} alt={viewingTask.assignee.name || viewingTask.assignee.login} />
+                        <AvatarFallback>
+                          {viewingTask.assignee.name ? viewingTask.assignee.name[0].toUpperCase() : viewingTask.assignee.login[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm text-foreground">{viewingTask.assignee.name || viewingTask.assignee.login}</span>
+                    </div>
                   </div>
-                </div>
-              )}
-              {viewingTask.dueDate && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Due Date</Label>
-                  <div className="text-sm text-foreground mt-1">{new Date(viewingTask.dueDate).toLocaleDateString()}</div>
-                </div>
-              )}
-              <div>
-                <Label className="text-xs text-muted-foreground">Status</Label>
-                <div className="text-sm text-foreground mt-1">{viewingTask.status}</div>
-              </div>
-              {viewingTask.assignee && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Contributor</Label>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <Avatar className="h-6 w-6">
-                      <AvatarImage src={viewingTask.assignee.avatarUrl} alt={viewingTask.assignee.name} />
-                      <AvatarFallback>{viewingTask.assignee.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm">{viewingTask.assignee.name}</span>
+                )}
+
+                {viewingTask.description && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Description</Label>
+                    <p className="mt-1 text-sm text-foreground whitespace-pre-wrap bg-muted p-3 rounded-md">{viewingTask.description}</p>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+
+                {viewingTask.dueDate && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Due Date</Label>
+                    <div className="mt-1 flex items-center space-x-2 text-sm text-foreground">
+                      <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                      <span>{new Date(viewingTask.dueDate).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {viewingTask.subtasks && viewingTask.subtasks.length > 0 && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Subtasks</Label>
+                    <ul className="mt-1 space-y-2">
+                      {viewingTask.subtasks.map(subtask => (
+                        <li key={subtask.id} className="flex items-center space-x-2 text-sm text-foreground">
+                          {subtask.completed ? <CheckSquare className="h-4 w-4 text-green-500" /> : <Square className="h-4 w-4 text-muted-foreground" />}
+                          <span className={subtask.completed ? 'line-through text-muted-foreground' : ''}>{subtask.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {viewingTask.attachments && viewingTask.attachments.length > 0 && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Attachments</Label>
+                    <ul className="mt-1 space-y-2">
+                      {viewingTask.attachments.map(attachment => (
+                        <li key={attachment.name} className="flex items-center space-x-2 text-sm text-foreground">
+                          <Paperclip className="h-4 w-4 text-muted-foreground" />
+                          <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                            {attachment.name}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline" onClick={handleCloseViewTaskDialog}>Close</Button>
+                </DialogClose>
+              </DialogFooter>
+            </>
           )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCloseViewTaskDialog}>Close</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </DndContext>

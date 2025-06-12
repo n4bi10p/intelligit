@@ -1,8 +1,39 @@
+export type TaskStatus = 'To Do' | 'In Progress' | 'Done';
+
+export interface Contributor {
+  login: string;
+  name?: string;
+  avatar_url?: string;
+  id?: number; // Keeping id for now as it might be used elsewhere, but primary key is login
+  html_url?: string; // Added
+  apiUrl?: string; // Added
+  contributions?: number; // Added
+  // Add other fields from GitHub API as needed
+}
+
+export interface TaskAssignee {
+  login: string;
+  name?: string;
+  avatarUrl?: string;
+  avatarHint?: string; // Keep if used for AI hints, though ideally derived
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  assignee?: TaskAssignee; // Updated to TaskAssignee
+  subtasks?: { id: string; title: string; completed: boolean }[];
+  dueDate?: string;
+  attachments?: { name: string; url: string }[];
+  // Add any other relevant fields
+}
+
 export interface Collaborator {
   id: string;
   name: string;
-  avatarUrl: string;
-  online: boolean;
+  avatarUrl?: string;
   avatarHint?: string;
 }
 
@@ -14,8 +45,6 @@ export interface Activity {
   icon?: React.ElementType;
 }
 
-export type TaskStatus = 'To Do' | 'In Progress' | 'Done';
-
 export interface Subtask {
   id: string;
   title: string;
@@ -25,18 +54,6 @@ export interface Subtask {
 export interface Attachment {
   name: string;
   url: string;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  assignee?: Pick<Collaborator, 'name' | 'avatarUrl' | 'avatarHint'>;
-  priority?: 'low' | 'medium' | 'high';
-  description?: string;
-  subtasks?: Subtask[];
-  dueDate?: string;
-  attachments?: Attachment[];
 }
 
 export interface ChatMessage {
@@ -57,16 +74,6 @@ export interface TaskStatusObject {
   id: string;
   name: TaskStatus;
   tasks: Task[];
-}
-
-export interface Contributor {
-  id: number; // GitHub user ID
-  login: string; // GitHub username
-  name?: string; // Display name (often same as login or null from contributors API)
-  avatar_url?: string;
-  html_url?: string; // Link to GitHub profile
-  apiUrl: string; // API URL to fetch full user details, e.g., https://api.github.com/users/{login}
-  contributions?: number;
 }
 
 export interface Branch {

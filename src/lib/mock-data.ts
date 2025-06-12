@@ -1,13 +1,12 @@
-
 import type { Collaborator, Activity, Task, CodeDiscussion, TaskStatus } from '@/types';
 import { GitCommit, MessageCircle, CheckCircle, UserCircle } from 'lucide-react';
 
 export const mockCollaborators: Collaborator[] = [
-  { id: '1', name: 'Alice Wonderland', avatarUrl: 'https://placehold.co/40x40.png', online: true, avatarHint: 'woman face' },
-  { id: '2', name: 'Bob The Builder', avatarUrl: 'https://placehold.co/40x40.png', online: false, avatarHint: 'man construction' },
-  { id: '3', name: 'Charlie Chaplin', avatarUrl: 'https://placehold.co/40x40.png', online: true, avatarHint: 'classic actor' },
-  { id: '4', name: 'Diana Prince', avatarUrl: 'https://placehold.co/40x40.png', online: true, avatarHint: 'superhero woman' },
-  { id: '5', name: 'Edward Scissorhands', avatarUrl: 'https://placehold.co/40x40.png', online: false, avatarHint: 'fantasy character' },
+  { id: '1', name: 'Alice Wonderland', avatarUrl: 'https://placehold.co/40x40.png', avatarHint: 'woman face' },
+  { id: '2', name: 'Bob The Builder', avatarUrl: 'https://placehold.co/40x40.png', avatarHint: 'man construction' },
+  { id: '3', name: 'Charlie Chaplin', avatarUrl: 'https://placehold.co/40x40.png', avatarHint: 'classic actor' },
+  { id: '4', name: 'Diana Prince', avatarUrl: 'https://placehold.co/40x40.png', avatarHint: 'superhero woman' },
+  { id: '5', name: 'Edward Scissorhands', avatarUrl: 'https://placehold.co/40x40.png', avatarHint: 'fantasy character' },
 ];
 
 export const mockActivities: Activity[] = [
@@ -42,12 +41,12 @@ export const mockActivities: Activity[] = [
 ];
 
 export const mockTasks: Task[] = [
-  { id: '1', title: 'Design new logo', status: 'To Do', assignee: mockCollaborators[0], priority: 'high' },
-  { id: '2', title: 'Implement user authentication', status: 'In Progress', assignee: mockCollaborators[1], priority: 'high' },
-  { id: '3', title: 'Write documentation for API', status: 'To Do', priority: 'medium' },
-  { id: '4', title: 'Fix bug #1023 - UI glitch on mobile', status: 'In Progress', assignee: mockCollaborators[2] },
-  { id: '5', title: 'Deploy version 1.2 to staging', status: 'Done', assignee: mockCollaborators[3], priority: 'low' },
-  { id: '6', title: 'Setup CI/CD pipeline', status: 'Done', assignee: mockCollaborators[0] },
+  { id: '1', title: 'Design new logo', status: 'To Do' },
+  { id: '2', title: 'Implement user authentication', status: 'In Progress' },
+  { id: '3', title: 'Write documentation for API', status: 'To Do' },
+  { id: '4', title: 'Fix bug #1023 - UI glitch on mobile', status: 'In Progress' },
+  { id: '5', title: 'Deploy version 1.2 to staging', status: 'Done' },
+  { id: '6', title: 'Setup CI/CD pipeline', status: 'Done' },
   { id: '7', title: 'Research new charting library', status: 'To Do' },
 ];
 

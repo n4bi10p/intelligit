@@ -248,6 +248,28 @@ export default function CodeCollabAIPage() {
     }
   }, []);
 
+  // Handler for clicking a commit
+  const handleCommitClick = (commit: Commit) => {
+    setSelectedCommit(commit);
+    setIsCommitDetailOpen(true);
+  };
+
+  // Handler for changing commit page
+  const handleCommitPageChange = (newPage: number) => {
+    if (currentRepoOwner && currentRepoName) {
+      fetchCommitsForPage(currentRepoOwner, currentRepoName, newPage, commitsPerPage, tokenInput, selectedBranch || undefined);
+    }
+  };
+
+  // Handler for clicking a contributor in CollabSidebar
+  const handleContributorClick = (contributor: Contributor) => {
+    setSelectedContributor(contributor);
+    setIsContributorDetailOpen(true);
+  };
+  
+  // Handler for changing branch (this was already defined, ensuring it's used)
+  // const handleBranchChange = async (branchName: string) => { ... } // Definition exists further down
+
   const parseLinkHeader = (linkHeader: string | null): Record<string, string> => {
     if (!linkHeader) {
       return {};
@@ -437,27 +459,42 @@ export default function CodeCollabAIPage() {
         setContributors(initialContributors);
 
         // Now fetch detailed info for each contributor to get their full name
-        const detailedContributors = await Promise.all(
-          initialContributors.map(async (contrib) => {
-            try {
-              const userResponse = await fetch(contrib.apiUrl, { headers });
-              if (!userResponse.ok) {
-                console.warn(`Failed to fetch details for ${contrib.login}: ${userResponse.status}`);
-                return contrib; // Return original contributor data if fetch fails
+        const fetchFullContributorData = async (basicContributors: Contributor[], token?: string) => {
+          const headers: HeadersInit = {
+            'Accept': 'application/vnd.github.v3+json',
+          };
+          if (token) {
+            headers['Authorization'] = `token ${token}`;
+          }
+
+          const detailedContributors = await Promise.all(
+            basicContributors.map(async (contrib) => {
+              if (!contrib.apiUrl) { // Check if apiUrl is defined
+                console.warn(`[IntelliGit-Page] Contributor ${contrib.login} has no apiUrl, skipping detail fetch.`);
+                return { ...contrib, name: contrib.login, contributions: contrib.contributions || 0 }; // Return basic info if no apiUrl
               }
-              const userData = await userResponse.json();
-              return {
-                ...contrib,
-                name: userData.name || contrib.login, // Use fetched name, fallback to login
-              };
-            } catch (err) {
-              console.error(`Error fetching details for ${contrib.login}:`, err);
-              return contrib; // Return original contributor data on error
-            }
-          })
-        );
-        console.log('[IntelliGit-Page] Fetched detailed contributors list:', detailedContributors.length);
-        setContributors(detailedContributors);
+              try {
+                const userResponse = await fetch(contrib.apiUrl, { headers });
+                if (!userResponse.ok) {
+                  console.warn(`Failed to fetch details for ${contrib.login}: ${userResponse.status}`);
+                  return contrib; // Return original contributor data if fetch fails
+                }
+                const userData = await userResponse.json();
+                return {
+                  ...contrib,
+                  name: userData.name || contrib.login, // Use fetched name, fallback to login
+                };
+              } catch (err) {
+                console.error(`Error fetching details for ${contrib.login}:`, err);
+                return contrib; // Return original contributor data on error
+              }
+            })
+          );
+          console.log('[IntelliGit-Page] Fetched detailed contributors list:', detailedContributors.length);
+          setContributors(detailedContributors);
+        };
+
+        await fetchFullContributorData(initialContributors, tokenInput);
       }
     } catch (contributorError: any) {
       console.error('[IntelliGit-Page] Error fetching contributor data from GitHub:', contributorError);
@@ -588,45 +625,27 @@ export default function CodeCollabAIPage() {
     console.log("[CodeCollabAIPage] Opening Add Member dialog.");
   };
 
-  const handleCommitClick = (commit: Commit) => {
-    setSelectedCommit(commit);
-    setIsCommitDetailOpen(true);
-    console.log("[CodeCollabAIPage] Commit clicked:", commit.hash);
-  };
-
-  const handleContributorClick = (contributor: Contributor) => {
-    setSelectedContributor(contributor);
-    setIsContributorDetailOpen(true);
-    console.log("[CodeCollabAIPage] Contributor clicked:", contributor.login);
-  };
-
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
-      <main className="w-full max-w-7xl h-[calc(100vh-2rem)] flex rounded-lg shadow-2xl overflow-hidden border border-border">
-        <CollabSidebar 
-          contributors={contributors} 
-          onContributorClick={handleContributorClick}
-          onAddMemberClick={handleOpenAddMemberDialog} // Pass handler to open dialog
-        />
-        <MainPanel 
-          gitLog={gitLog} 
-          onOpenSettingsDialog={handleOpenSettings}
-          commitCurrentPage={commitCurrentPage}
-          totalCommitPages={totalCommitPages}
-          onCommitPageChange={handlePageChange}
-          onCommitClick={handleCommitClick}
-          branches={branches} // Pass branches
-          selectedBranch={selectedBranch} // Pass selectedBranch
-          onBranchChange={handleBranchChange} // Pass handler
-        /> 
-      </main>
-      {/* Pass the handler to WebviewMessenger */}
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <WebviewMessenger onGitLogDataReceived={handleGitLogDataReceived} />
-      {gitLogError && (
-        <div style={{ color: 'red', marginTop: '10px', padding: '10px', border: '1px solid red', backgroundColor: '#ffe0e0' }}>
-          <strong>Error fetching Git log:</strong> {gitLogError}
-        </div>
-      )}
+
+      <CollabSidebar
+        contributors={contributors}
+        onAddMemberClick={() => setIsAddMemberDialogOpen(true)} // Corrected prop name
+        onContributorClick={handleContributorClick}
+      />
+      <MainPanel
+        gitLog={gitLog}
+        onOpenSettingsDialog={() => setIsSettingsOpen(true)}
+        contributors={contributors}
+        commitCurrentPage={commitCurrentPage}
+        totalCommitPages={totalCommitPages}
+        onCommitPageChange={handleCommitPageChange}
+        onCommitClick={handleCommitClick}
+        branches={branches}
+        selectedBranch={selectedBranch}
+        onBranchChange={handleBranchChange} // Uses the existing handleBranchChange
+      />
       <SettingsDialog
         open={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}

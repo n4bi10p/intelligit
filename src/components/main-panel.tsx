@@ -10,7 +10,7 @@ import { TasksBoard } from './tasks-board';
 import { CodeChat } from './code-chat';
 import { AiRefactor } from './ai-refactor';
 import { Commit } from './WebviewMessenger'; // Assuming Commit type is here or imported appropriately
-import { Branch } from '../types'; // Import Branch type
+import { Branch, Contributor } from '../types'; // Import Branch type and Contributor type
 
 interface MainPanelProps {
   gitLog: Commit[];
@@ -22,6 +22,7 @@ interface MainPanelProps {
   branches: Branch[]; // Added branches prop
   selectedBranch: string | null; // Added selectedBranch prop
   onBranchChange: (branchName: string) => void; // Added onBranchChange prop
+  contributors: Contributor[]; // Added contributors prop
 }
 
 export function MainPanel({ 
@@ -33,7 +34,8 @@ export function MainPanel({
   onCommitClick,
   branches, // Added branches prop
   selectedBranch, // Added selectedBranch prop
-  onBranchChange // Added onBranchChange prop
+  onBranchChange, // Added onBranchChange prop
+  contributors // Added contributors prop
 }: MainPanelProps) { 
   console.log('[MainPanel - src/components/main-panel.tsx] Received gitLog prop with length:', gitLog?.length);
   console.log('[MainPanel - src/components/main-panel.tsx] Received branches:', branches);
@@ -116,7 +118,7 @@ export function MainPanel({
           )}
         </TabsContent>
         <TabsContent value="tasks" className="flex-1 overflow-auto mt-0">
-          <TasksBoard />
+          <TasksBoard contributors={contributors} />
         </TabsContent>
         <TabsContent value="chat" className="flex-1 overflow-auto mt-0">
           <CodeChat />
