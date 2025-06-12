@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GitFork, UploadCloud, RefreshCw, CheckCircle, Loader2, Settings as SettingsIcon } from 'lucide-react';
 import { ActivityFeed } from '@/app/components/activity-feed'; // Corrected import path
 import { TasksBoard } from './tasks-board';
-import { CodeChat } from './code-chat';
+import { CodeChat } from './code-chat'; // Or the correct path
 import { AiRefactor } from './ai-refactor';
 import { Commit } from './WebviewMessenger'; // Assuming Commit type is here or imported appropriately
 import { Branch, Contributor } from '../types'; // Import Branch type and Contributor type
