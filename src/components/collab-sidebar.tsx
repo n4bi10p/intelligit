@@ -5,7 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, UserPlus, LogIn, LogOut, UserCircle } from 'lucide-react'; // Added LogIn, LogOut, UserCircle
+import { Search, UserPlus, LogIn, LogOut, UserCircle } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import type { Collaborator, Contributor, Branch } from '@/types';
 import { mockCollaborators } from '@/lib/mock-data'; // Using mock data
 
@@ -84,20 +89,36 @@ export function CollabSidebar({
       {/* Profile Section */}
       <div className="pb-2 mb-2 border-b border-border">
         {isUserAuthenticated && githubUserName ? (
-          <div className="flex items-center space-x-3">
-            <Avatar className="h-10 w-10">
-              {githubUserAvatar && <AvatarImage src={githubUserAvatar} alt={githubUserName} />}
-              <AvatarFallback>
-                {githubUserName ? githubUserName.substring(0, 2).toUpperCase() : <UserCircle size={20} />}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{githubUserName}</p>
-              <Button variant="link" size="sm" onClick={onLogoutClick} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
-                <LogOut size={14} className="mr-1" /> Logout
-              </Button>
-            </div>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <div className="flex items-center space-x-3 cursor-pointer p-2 hover:bg-muted rounded-md">
+                <Avatar className="h-10 w-10">
+                  {githubUserAvatar && <AvatarImage src={githubUserAvatar} alt={githubUserName} />}
+                  <AvatarFallback>
+                    {githubUserName ? githubUserName.substring(0, 2).toUpperCase() : <UserCircle size={20} />}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{githubUserName}</p>
+                </div>
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-2">
+              <div className="space-y-1">
+                <div className="px-2 py-1.5 text-sm font-semibold">
+                  {githubUserName}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onLogoutClick}
+                  className="w-full justify-start text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <LogOut size={14} className="mr-2" /> Logout
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         ) : (
           <Button variant="outline" className="w-full" onClick={onLoginClick}>
             <LogIn size={16} className="mr-2" />

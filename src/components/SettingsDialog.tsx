@@ -11,15 +11,23 @@ import {
   DialogDescription
 } from '@/components/ui/dialog';
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"; // Assuming shadcn/ui select
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command" // For searchable select
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover" // For searchable select
+import { Check, ChevronsUpDown } from "lucide-react" // For searchable select icons
+
+import { cn } from "@/lib/utils"; // For cn utility
 
 interface RepositoryInfo {
   id: string | number;
@@ -46,66 +54,78 @@ interface SettingsDialogProps {
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   open,
   onOpenChange,
-  repoInput,
-  setRepoInput,
+  repoInput, // This will now be primarily controlled by the Combobox selection
+  setRepoInput, // This will be called by the Combobox
   onConnect,
   userRepositories,
   isFetchingUserRepos,
-  onRepoSelect,
+  onRepoSelect, // This might be redundant if setRepoInput handles the selection directly
   error,
   isLoading,
 }) => {
+  const [popoverOpen, setPopoverOpen] = React.useState(false);
+
   return (
     <ShadDialog open={open} onOpenChange={onOpenChange}>
-      <ShadDialogContent className="sm:max-w-[480px]"> {/* Increased width slightly */}
+      <ShadDialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Connect to Repository</DialogTitle>
           <DialogDescription>
-            Select a repository from the dropdown or enter the URL/owner/repo manually.
-            GitHub authentication is handled by the extension.
+            Search and select a repository. GitHub authentication is handled by the extension.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {userRepositories && userRepositories.length > 0 && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="repoSelect" className="text-right">
-                Select Repo
-              </Label>
-              <Select
-                value={repoInput}
-                onValueChange={(value) => {
-                  if (value) {
-                    onRepoSelect(value);
-                  }
-                }}
-                disabled={isFetchingUserRepos}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder={isFetchingUserRepos ? "Loading repos..." : "Select a repository"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {isFetchingUserRepos && <SelectItem value="loading" disabled>Loading...</SelectItem>}
-                  {!isFetchingUserRepos && userRepositories.map((repo) => (
-                    <SelectItem key={repo.id} value={repo.full_name}>
-                      {repo.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="repoUrl" className="text-right">
-              Manual Entry
+          <div className="grid grid-cols-1 items-center gap-4"> 
+            <Label htmlFor="repoCombobox" className="sr-only"> 
+              Repository
             </Label>
-            <Input
-              id="repoUrl"
-              value={repoInput}
-              onChange={(e) => setRepoInput(e.target.value)}
-              className="col-span-3"
-              placeholder="owner/repo or GitHub URL"
-            />
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={popoverOpen}
+                  className="w-full justify-between"
+                  disabled={isFetchingUserRepos || isLoading}
+                >
+                  {repoInput
+                    ? userRepositories.find((repo) => repo.full_name === repoInput)?.full_name
+                    : (isFetchingUserRepos ? "Loading repositories..." : "Select repository...")}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[440px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search repository..." />
+                  <CommandList>
+                    <CommandEmpty>{isFetchingUserRepos ? "Loading..." : "No repository found."}</CommandEmpty>
+                    <CommandGroup>
+                      {userRepositories.map((repo) => (
+                        <CommandItem
+                          key={repo.id}
+                          value={repo.full_name}
+                          onSelect={(currentValue: string) => { // Explicitly type currentValue
+                            setRepoInput(currentValue === repoInput ? "" : currentValue);
+                            // onRepoSelect(currentValue); // Call onRepoSelect if still needed
+                            setPopoverOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              repoInput === repo.full_name ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {repo.full_name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
+          
           {error && (
             <div className="col-span-4 text-red-500 text-sm p-2 bg-red-50 border border-red-200 rounded">
               {error}

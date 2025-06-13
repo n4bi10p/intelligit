@@ -64,13 +64,13 @@ const CommitDetailDialog: React.FC<{
             </div>
             <div className="grid grid-cols-4 items-baseline gap-x-4 gap-y-1">
               <Label htmlFor="subject" className="text-right font-semibold col-span-1">Subject:</Label>
-              <div id="subject" className="col-span-3">{commit.subject}</div>
+              <div id="subject" className="col-span-3 bg-muted p-2 rounded-md break-words">{commit.subject}</div>
             </div>
             {commit.body && (
               <div className="grid grid-cols-4 items-start gap-x-4 gap-y-1">
                 <Label htmlFor="message" className="text-right font-semibold col-span-1">Message:</Label>
-                <div className="col-span-3 bg-muted rounded-md flex items-start">
-                  <div id="message" className="whitespace-pre-wrap font-sans text-sm p-2 w-full">
+                <div className="col-span-3 bg-muted p-2 rounded-md flex items-start">
+                  <div id="message" className="whitespace-pre-wrap font-sans text-sm w-full">
                     {commit.body}
                   </div>
                 </div>
@@ -271,13 +271,36 @@ export default function CodeCollabAIPage() {
         if (token) {
           console.log('[IntelliGit-Page] GitHub token received. Fetching user repositories.');
           fetchUserRepositories(token);
-          fetchGithubUserInfo(token); 
+          // fetchGithubUserInfo(token); // This call can remain as a fallback or for explicit refresh
         } else {
           console.warn('[IntelliGit-Page] Received null GitHub token.');
           setUserRepositories([]);
           setIsUserAuthenticated(false);
           setGithubUserName(null);
           setGithubUserAvatar(null);
+          if (message.error) { // Check for error on token message as well
+            setErrorMessage(`Auth Error: ${message.error}`);
+          }
+        }
+        break;
+      case 'githubUserInfo': // New handler for githubUserInfo
+        const userInfo = message.userInfo as { login: string; avatarUrl: string; name: string | null } | null;
+        if (userInfo) {
+          console.log('[IntelliGit-Page] Received githubUserInfo from extension:', userInfo);
+          setGithubUserName(userInfo.name || userInfo.login);
+          setGithubUserAvatar(userInfo.avatarUrl);
+          setIsUserAuthenticated(true);
+          // Clear previous auth error if user info is successfully received
+          setErrorMessage(null);
+        } else {
+          console.log('[IntelliGit-Page] Received null githubUserInfo from extension.');
+          // Potentially redundant if githubToken handler already cleared these, but ensures consistency
+          setIsUserAuthenticated(false);
+          setGithubUserName(null);
+          setGithubUserAvatar(null);
+          if (message.error) {
+            setErrorMessage(`Auth Error: ${message.error}`);
+          }
         }
         break;
       case 'repositoryInfo':
@@ -307,7 +330,24 @@ export default function CodeCollabAIPage() {
       default:
         // console.log('[IntelliGit-Page] Received unknown message command from extension:', message.command);
     }
-  }, [setGithubToken, setAutoDetectedOwner, setAutoDetectedRepo, fetchUserRepositories, repositoryConnected, setGitLogError, setGitLog, setTotalCommitPages, setCommitCurrentPage, setSelectedBranch, fetchGithubUserInfo]);
+  }, [
+    setGithubToken, 
+    setAutoDetectedOwner, 
+    setAutoDetectedRepo, 
+    fetchUserRepositories, 
+    repositoryConnected, 
+    setGitLogError, 
+    setGitLog, 
+    setTotalCommitPages, 
+    setCommitCurrentPage, 
+    setSelectedBranch, 
+    fetchGithubUserInfo, // Keep fetchGithubUserInfo for now
+    setGithubUserName,    // Added
+    setGithubUserAvatar,  // Added
+    setIsUserAuthenticated, // Added
+    setErrorMessage,      // Added
+    setUserRepositories   // Added (used in githubToken case)
+  ]);
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
