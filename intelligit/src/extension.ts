@@ -1,10 +1,73 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { exec } from 'child_process'; // Added for executing shell commands
+import { exec } from 'child_process';
+import * as https from 'https'; // Added for making HTTPS requests to GitHub API
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+// Helper function to send user info
+async function sendGitHubUserInfo(panel: vscode.WebviewPanel, token: string | null | undefined, context: vscode.ExtensionContext) { // Allow undefined token
+    if (!token) {
+        console.log('[IntelliGit] No token provided to sendGitHubUserInfo, sending null userInfo.');
+        panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+        return;
+    }
+    console.log('[IntelliGit] Attempting to fetch GitHub user info.');
+
+    const options = {
+        hostname: 'api.github.com',
+        path: '/user',
+        method: 'GET',
+        headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': `VSCode-IntelliGit-Extension/${context.extension.packageJSON.version || '0.0.1'}`
+        }
+    };
+
+    return new Promise<void>((resolve, reject) => {
+        const req = https.request(options, (res: any) => {
+            let data = '';
+            res.on('data', (chunk: any) => { data += chunk; });
+            res.on('end', async () => {
+                try {
+                    const responseBody = JSON.parse(data);
+                    if (res.statusCode === 200) {
+                        console.log('[IntelliGit] Successfully fetched GitHub user info for:', responseBody.login);
+                        panel.webview.postMessage({
+                            command: 'githubUserInfo',
+                            userInfo: {
+                                login: responseBody.login,
+                                avatarUrl: responseBody.avatar_url,
+                                name: responseBody.name 
+                            }
+                        });
+                        resolve();
+                    } else {
+                        console.error(`[IntelliGit] GitHub API error fetching user info: ${res.statusCode} - ${data}`);
+                        panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null, error: `GitHub API error: ${res.statusCode}. ${responseBody.message || 'Failed to fetch user info.'}` });
+                        if (res.statusCode === 401) { 
+                            console.log('[IntelliGit] Token is invalid (401). Clearing stored token.');
+                            await context.secrets.delete('githubToken');
+                            panel.webview.postMessage({ command: 'githubToken', token: null }); 
+                        }
+                        reject(new Error(`GitHub API error: ${res.statusCode}`));
+                    }
+                } catch (parseError: any) {
+                    console.error('[IntelliGit] Error parsing GitHub user info response:', parseError, 'Raw data:', data);
+                    panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null, error: 'Error parsing user info from GitHub.' });
+                    reject(parseError);
+                }
+            });
+        });
+        req.on('error', (e: any) => {
+            console.error('[IntelliGit] Network error fetching GitHub user info:', e);
+            panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null, error: e.message });
+            reject(e);
+        });
+        req.end();
+    });
+}
+
 export function activate(context: vscode.ExtensionContext) {
     console.log('[IntelliGit] Activating extension...');
 
@@ -28,112 +91,121 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Handle messages from the webview (relayed by the script in getWebviewContent)
             panel.webview.onDidReceiveMessage(
-                async message => { // Made async to handle exec promise
-                    console.log('[IntelliGit] Message received from webview:', message);
+                async message => {
+                    console.log(`[IntelliGit] Message received from webview. Command: ${message?.command}, Full message:`, message);
                     switch (message.command) {
-                        case 'requestGitHubToken':
+                        case 'requestGitHubToken': // Typically called on webview load
                             try {
-                                const session = await vscode.authentication.getSession('github', ['repo', 'read:user'], { createIfNone: true });
-                                if (session) {
-                                    panel.webview.postMessage({ command: 'githubToken', token: session.accessToken });
+                                let token: string | undefined = await context.secrets.get('githubToken');
+                                let session: vscode.AuthenticationSession | undefined;
+
+                                if (token) {
+                                    try {
+                                        // Silently verify if the stored token corresponds to an active session
+                                        session = await vscode.authentication.getSession('github', ['repo', 'read:user'], { silent: true });
+                                        if (!session || session.accessToken !== token) {
+                                            console.log('[IntelliGit] Stored token invalid or mismatched. Clearing.');
+                                            await context.secrets.delete('githubToken');
+                                            token = undefined; 
+                                        }
+                                    } catch (e) {
+                                        console.warn('[IntelliGit] Error during silent session check, clearing token:', e);
+                                        await context.secrets.delete('githubToken');
+                                        token = undefined;
+                                    }
+                                }
+
+                                if (!token) { 
+                                    console.log('[IntelliGit] No valid token in secrets, attempting to get/create new session.');
+                                    session = await vscode.authentication.getSession('github', ['repo', 'read:user'], { createIfNone: true });
+                                    if (session) {
+                                        token = session.accessToken;
+                                        await context.secrets.store('githubToken', token);
+                                        console.log('[IntelliGit] New session obtained and token stored.');
+                                    }
+                                }
+
+                                if (token) {
+                                    panel.webview.postMessage({ command: 'githubToken', token: token });
+                                    await sendGitHubUserInfo(panel, token, context);
                                 } else {
-                                    panel.webview.postMessage({ command: 'githubToken', error: 'GitHub authentication failed.' });
+                                    panel.webview.postMessage({ command: 'githubToken', token: null, error: 'GitHub authentication could not be established.' });
+                                    panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+                                    await context.secrets.delete('githubToken'); // Ensure secrets cleared
                                 }
                             } catch (error: any) {
-                                console.error('[IntelliGit] GitHub authentication error:', error);
-                                panel.webview.postMessage({ command: 'githubToken', error: error.message || 'GitHub authentication failed.' });
+                                console.error('[IntelliGit] GitHub authentication error in requestGitHubToken:', error);
+                                panel.webview.postMessage({ command: 'githubToken', token: null, error: error.message || 'GitHub authentication failed.' });
+                                panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+                                await context.secrets.delete('githubToken');
                             }
                             return;
-                        case 'helloFromWebview':
-                            vscode.window.showInformationMessage(`Received: ${message.text}`);
-                            const responsePayload = {
-                                command: 'responseFromExtension',
-                                payload: 'Hello back from the extension! (Received: ' + message.text + ')'
-                            };
-                            console.log('[IntelliGit] Posting message back to webview:', responsePayload);
-                            panel.webview.postMessage(responsePayload);
-                            return;
-                        case 'getGitLog':
-                            console.log('[IntelliGit] Received getGitLog request from webview.');
-                            const workspaceFolders = vscode.workspace.workspaceFolders;
-                            if (!workspaceFolders || workspaceFolders.length === 0) {
-                                console.error('[IntelliGit] No workspace folder open.');
-                                panel.webview.postMessage({ command: 'gitLogResponse', payload: [], error: 'No workspace folder open.' });
-                                return;
+
+                        case 'requestGitHubLogin': // User explicitly clicks login
+                            console.log('[IntelliGit] Entered requestGitHubLogin case.');
+                            try {
+                                console.log('[IntelliGit] requestGitHubLogin: Attempting to force new session via vscode.authentication.getSession.');
+                                const session = await vscode.authentication.getSession('github', ['repo', 'read:user'], { createIfNone: true });
+                                console.log('[IntelliGit] requestGitHubLogin: vscode.authentication.getSession call completed. Session object:', session);
+
+                                if (session) {
+                                    await context.secrets.store('githubToken', session.accessToken);
+                                    panel.webview.postMessage({ command: 'githubToken', token: session.accessToken });
+                                    await sendGitHubUserInfo(panel, session.accessToken, context);
+                                    console.log('[IntelliGit] requestGitHubLogin: Login successful, token stored and info sent.');
+                                } else {
+                                    panel.webview.postMessage({ command: 'githubToken', token: null, error: 'GitHub login failed or was cancelled by user (session is null/undefined).', details: 'Session object was null or undefined after getSession call.' });
+                                    panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+                                    await context.secrets.delete('githubToken');
+                                    console.log('[IntelliGit] requestGitHubLogin: Login failed or cancelled by user (session is null/undefined).');
+                                }
+                            } catch (error: any) {
+                                console.error('[IntelliGit] GitHub login error in requestGitHubLogin catch block:', error);
+                                panel.webview.postMessage({ command: 'githubToken', token: null, error: error.message || 'GitHub login failed due to an error.', details: error.toString() });
+                                panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+                                await context.secrets.delete('githubToken');
                             }
-                            const workspacePath = workspaceFolders[0].uri.fsPath;
-                            console.log(`[IntelliGit] Workspace path: ${workspacePath}`);
+                            return;
 
-                            // Using a complex format with null character as separator for fields, and a unique record separator.
-                            // Fields: hash, author name, author email, committer date (ISO8601 strict), subject, body, parent hashes, ref names (decorations)
-                            // Field separator: \x1F (Unit Separator)
-                            // Record separator: \0 (NUL character, implicitly from -z)
-                            const fieldSeparator = '\x1F';
-                            const gitLogFormat = ["%H", "%an", "%ae", "%cI", "%s", "%b", "%P", "%D"].join(fieldSeparator);
-                            // The -z option makes git output NUL-terminated records.
-                            const gitLogCommand = `git log --pretty=format:"${gitLogFormat}" --date=iso-strict --decorate=full -z --max-count=50`;
-                            
-                            console.log(`[IntelliGit] Executing command: ${gitLogCommand} in ${workspacePath}`);
+                        case 'requestGitHubLogout':
+                            try {
+                                console.log('[IntelliGit] requestGitHubLogout: Clearing token.');
+                                await context.secrets.delete('githubToken');
+                                panel.webview.postMessage({ command: 'githubToken', token: null });
+                                panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+                                vscode.window.showInformationMessage('Successfully logged out of GitHub.');
+                                console.log('[IntelliGit] requestGitHubLogout: Logout successful.');
+                            } catch (error: any) {
+                                console.error('[IntelliGit] GitHub logout error:', error);
+                                panel.webview.postMessage({ command: 'githubToken', token: null }); // Still inform webview
+                                panel.webview.postMessage({ command: 'githubUserInfo', userInfo: null });
+                            }
+                            return;
 
-                            exec(gitLogCommand, { cwd: workspacePath, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
-                                if (error) {
-                                    console.error(`[IntelliGit] Error executing git log: ${error.message}`);
-                                    console.error(`[IntelliGit] Git log stderr: ${stderr}`);
-                                    panel.webview.postMessage({ command: 'gitLogResponse', payload: [], error: `Failed to get git log: ${stderr || error.message}` });
-                                    return;
-                                }
-                                if (stderr) {
-                                    // Sometimes git might output warnings to stderr even on success, log it but proceed.
-                                    console.warn(`[IntelliGit] Git log stderr (non-fatal): `, stderr);
-                                }
-
-                                console.log(`[IntelliGit] Git log stdout raw length: ${stdout.length}`);
-                                
-                                // Log character codes for detailed analysis of NUL and other separators
-                                const charCodes = stdout.split('').map(c => c.charCodeAt(0));
-                                console.log('[IntelliGit] Raw stdout char codes (first 350):', charCodes.slice(0, 350).join(', '));
-                                if (charCodes.length > 350) {
-                                    console.log('[IntelliGit] (stdout has more char codes...)');
-                                }
-
-                                try {
-                                    // stdout is a single string with NUL-separated commit records.
-                                    // Each record contains fieldSeparator-separated fields.
-                                    const commitRecords = stdout.trimEnd().split('\0');
-                                    console.log(`[IntelliGit] Number of commit records (split by NUL): ${commitRecords.length}`);
-
-                                    // If the last element is an empty string (often happens with -z and split), remove it.
-                                    if (commitRecords.length > 0 && commitRecords[commitRecords.length - 1] === '') {
-                                        commitRecords.pop();
-                                        console.log(`[IntelliGit] Number of commit records after pop: ${commitRecords.length}`);
+                        case 'requestRepositoryInfo': // Added basic handler
+                            console.log('[IntelliGit] Received requestRepositoryInfo from webview.');
+                            const workspaceFoldersForInfo = vscode.workspace.workspaceFolders;
+                            if (workspaceFoldersForInfo && workspaceFoldersForInfo.length > 0) {
+                                const workspacePathForInfo = workspaceFoldersForInfo[0].uri.fsPath;
+                                // Attempt to get git remote URL
+                                exec('git remote get-url origin', { cwd: workspacePathForInfo }, (error, stdout, stderr) => {
+                                    if (error) {
+                                        console.warn(`[IntelliGit] Could not get remote URL: ${stderr || error.message}`);
+                                        panel.webview.postMessage({ command: 'repositoryInfo', owner: null, repo: null, error: 'Could not determine repository from git remote.' });
+                                        return;
                                     }
-                                    
-                                    console.log('[IntelliGit] Content of commitRecords (first 5):', JSON.stringify(commitRecords.slice(0, 5), null, 2));
-
-                                    const commits = commitRecords.map(record => {
-                                        const fields = record.split(fieldSeparator);
-                                        return {
-                                            hash: fields[0] || '',
-                                            authorName: fields[1] || '',
-                                            authorEmail: fields[2] || '',
-                                            date: fields[3] || '',
-                                            subject: fields[4] || '',
-                                            body: fields[5] || '', 
-                                            parents: fields[6] ? fields[6].split(' ').filter(p => p) : [],
-                                            refs: fields[7] || '' 
-                                        };
-                                    }).filter(commit => commit.hash); // Ensure we only keep commits that have a hash
-
-                                    console.log('[IntelliGit] Parsed commits count:', commits.length);
-                                    if (commits.length > 0) {
-                                        console.log('[IntelliGit] First parsed commit:', JSON.stringify(commits[0], null, 2));
+                                    const remoteUrl = stdout.trim();
+                                    // Basic parsing for https://github.com/owner/repo.git or git@github.com:owner/repo.git
+                                    const match = remoteUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(\.git)?$/i);
+                                    if (match && match[1] && match[2]) {
+                                        panel.webview.postMessage({ command: 'repositoryInfo', owner: match[1], repo: match[2] });
+                                    } else {
+                                        panel.webview.postMessage({ command: 'repositoryInfo', owner: null, repo: null, error: 'Could not parse owner/repo from remote URL.' });
                                     }
-                                    panel.webview.postMessage({ command: 'gitLogResponse', payload: commits });
-                                } catch (parseError: any) {
-                                    console.error('[IntelliGit] Error parsing git log output:', parseError);
-                                    panel.webview.postMessage({ command: 'gitLogResponse', payload: [], error: `Error parsing git log: ${parseError.message}` });
-                                }
-                            });
+                                });
+                            } else {
+                                panel.webview.postMessage({ command: 'repositoryInfo', owner: null, repo: null, error: 'No workspace folder open.' });
+                            }
                             return;
                     }
                 },

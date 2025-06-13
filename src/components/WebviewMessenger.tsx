@@ -15,24 +15,37 @@ export interface Commit {
     authorEmail: string;
     date: string;
     subject: string;
-    body: string;
-    parents: string[];
-    refs: string;
+    body?: string;
+    parents?: string;
+    refs?: string;
+}
+
+// Define a type for the vscodeApi prop
+interface VsCodeApi {
+    postMessage: (message: any) => void;
 }
 
 interface WebviewMessengerProps {
-    onGitLogDataReceived: (logData: Commit[], error?: string) => void;
-    // Add other props if WebviewMessenger needs to send other types of messages
-    // and receive corresponding data.
+    onGitLogDataReceived: (commits: Commit[], error: string | null) => void;
+    repositoryConnected: boolean;
+    vscodeApi: VsCodeApi; // Ensure this line is present and correct
 }
 
-const WebviewMessenger: React.FC<WebviewMessengerProps> = ({ onGitLogDataReceived }) => {
+const WebviewMessenger: React.FC<WebviewMessengerProps> = ({ onGitLogDataReceived, repositoryConnected, vscodeApi }) => {
     const [testResponse, setTestResponse] = useState<string>(''); // For the test button
 
     const sendMessageToExtension = useCallback((message: VsCodeMessage) => {
         console.log('[IntelliGit-UI] Sending message to parent (extension host):', message);
         window.parent.postMessage(message, '*'); // '*' is okay for local dev, be more specific for production
     }, []);
+
+    useEffect(() => {
+        // Use the passed vscodeApi prop
+        if (vscodeApi && !repositoryConnected) {
+            console.log('[IntelliGit-WebviewMessenger] Requesting initial git log via vscodeApi prop.');
+            vscodeApi.postMessage({ command: 'getGitLog' });
+        }
+    }, [repositoryConnected, vscodeApi]); // Add vscodeApi to dependencies
 
     useEffect(() => {
         // Send a message to get the git log when the component mounts
