@@ -12,6 +12,15 @@ import { AiRefactor } from './ai-refactor';
 import { Commit } from './WebviewMessenger'; // Assuming Commit type is here or imported appropriately
 import { Branch, Contributor } from '../types'; // Import Branch type and Contributor type
 
+// Define ChatMessage interface directly in main-panel.tsx or import from a shared types file
+interface ChatMessage {
+  id: string;
+  text: string;
+  sender: string;
+  timestamp: number | object;
+  avatar?: string;
+}
+
 interface MainPanelProps {
   gitLog: Commit[];
   gitLogError?: string | null; // Added gitLogError prop
@@ -24,6 +33,14 @@ interface MainPanelProps {
   selectedBranch: string | null; // Added selectedBranch prop
   onBranchChange: (branchName: string) => void; // Added onBranchChange prop
   contributors: Contributor[]; // Added contributors prop
+  // Chat props
+  chatMessages: ChatMessage[];
+  chatInput: string;
+  onChatInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSendChatMessage: () => void;
+  isSendingChatMessage: boolean;
+  chatError: string | null;
+  currentUserName: string | null;
 }
 
 export function MainPanel({ 
@@ -36,7 +53,15 @@ export function MainPanel({
   branches, // Added branches prop
   selectedBranch, // Added selectedBranch prop
   onBranchChange, // Added onBranchChange prop
-  contributors // Added contributors prop
+  contributors, // Added contributors prop
+  // Chat props
+  chatMessages,
+  chatInput,
+  onChatInputChange,
+  onSendChatMessage,
+  isSendingChatMessage,
+  chatError,
+  currentUserName
 }: MainPanelProps) { 
   console.log('[MainPanel - src/components/main-panel.tsx] Received gitLog prop with length:', gitLog?.length);
   console.log('[MainPanel - src/components/main-panel.tsx] Received branches:', branches);
@@ -122,7 +147,15 @@ export function MainPanel({
           <TasksBoard contributors={contributors} />
         </TabsContent>
         <TabsContent value="chat" className="flex-1 overflow-auto mt-0">
-          <CodeChat />
+          <CodeChat 
+            messages={chatMessages}
+            chatInput={chatInput}
+            onChatInputChange={onChatInputChange}
+            onSendChatMessage={onSendChatMessage}
+            isSendingChatMessage={isSendingChatMessage}
+            chatError={chatError}
+            currentUserName={currentUserName}
+          />
         </TabsContent>
         <TabsContent value="ai-refactor" className="flex-1 overflow-auto mt-0">
           <AiRefactor />

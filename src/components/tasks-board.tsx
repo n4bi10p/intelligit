@@ -17,18 +17,17 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { mockTasks } from '@/lib/mock-data';
 import type { Task, TaskStatus, Contributor, TaskAssignee } from '@/types';
 import { UserCircle, GripVertical, PlusCircle, Edit3, Trash2, CalendarDays, Paperclip, CheckSquare, Square } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
   DragStartEvent,
-  DragEndEvent,
   PointerSensor,
   useSensor,
   useSensors,
   closestCorners,
+  DragEndEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -200,7 +199,7 @@ interface TasksBoardProps {
 
 export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
   const columnNames: TaskStatus[] = ['To Do', 'In Progress', 'Done'];
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
+  const [tasks, setTasks] = useState<Task[]>([]); // Initialize with an empty array
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   
   // State for adding tasks

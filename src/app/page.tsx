@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CollabSidebar } from '@/components/collab-sidebar';
 import { MainPanel } from '@/components/main-panel';
 import WebviewMessenger, { Commit } from '@/components/WebviewMessenger'; // Import Commit interface
+import { db } from "@/firebase/firebase"; // Import Firebase db
+import { ref, push, onValue, off, serverTimestamp, DataSnapshot, set, get } from "firebase/database"; // Firebase Realtime Database functions
 import {
   Dialog,
   DialogContent,
@@ -29,6 +31,14 @@ interface RepositoryInfo {
   owner: {
     login: string;
   };
+}
+
+interface ChatMessage {
+  id: string;
+  text: string;
+  sender: string;
+  timestamp: number | object; // Can be number (client) or ServerValue.TIMESTAMP (server)
+  avatar?: string;
 }
 
 // CommitDetailDialog component
@@ -197,6 +207,12 @@ export default function CodeCollabAIPage() {
   const [githubUserName, setGithubUserName] = useState<string | null>(null);
   const [githubUserAvatar, setGithubUserAvatar] = useState<string | null>(null);
 
+  // New state for chat
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>("");
+  const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
   type PermissionLevel = 'pull' | 'push' | 'admin' | 'maintain' | 'triage';
 
   // Function to fetch GitHub user info
@@ -253,6 +269,82 @@ export default function CodeCollabAIPage() {
       setIsFetchingUserRepos(false);
     }
   }, [setErrorMessage, setIsFetchingUserRepos, setUserRepositories]);
+
+  // Chat: Function to get a sanitized repo ID for Firebase path
+  const getRepoId = useCallback(() => {
+    if (currentRepoOwner && currentRepoName) {
+      return `${currentRepoOwner}_${currentRepoName}`.replace(/[^a-zA-Z0-9_\\-]/g, '-');
+    }
+    return null;
+  }, [currentRepoOwner, currentRepoName]);
+
+  // Chat: Function to send a message
+  const handleSendChatMessage = async () => {
+    if (!chatInput.trim()) return;
+    if (!isUserAuthenticated || !githubUserName) {
+      setChatError("You must be logged in to send messages.");
+      return;
+    }
+    const repoId = getRepoId();
+    if (!repoId) {
+      setChatError("No repository selected to associate chat with.");
+      return;
+    }
+
+    setIsSendingMessage(true);
+    setChatError(null);
+
+    const messageData = {
+      text: chatInput,
+      sender: githubUserName,
+      avatar: githubUserAvatar || undefined,
+      timestamp: serverTimestamp(),
+    };
+
+    try {
+      const chatMessagesRef = ref(db, `chats/${repoId}`);
+      await push(chatMessagesRef, messageData);
+      setChatInput("");
+      console.log('[IntelliGit-Page] Chat message sent to Firebase for repo:', repoId);
+    } catch (error: any) {
+      console.error('[IntelliGit-Page] Error sending chat message:', error);
+      setChatError(`Failed to send message: ${error.message}`);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  // Chat: Effect to fetch/listen for chat messages
+  useEffect(() => {
+    const repoId = getRepoId();
+    if (!repoId || !repositoryConnected) {
+      setChatMessages([]); // Clear messages if no repo or not connected
+      return;
+    }
+
+    console.log('[IntelliGit-Page] Setting up Firebase listener for chat messages for repo:', repoId);
+    const chatMessagesRef = ref(db, `chats/${repoId}`);
+    
+    const listener = onValue(chatMessagesRef, (snapshot: DataSnapshot) => {
+      const messages: ChatMessage[] = [];
+      snapshot.forEach((childSnapshot) => {
+        messages.push({ id: childSnapshot.key!, ...childSnapshot.val() } as ChatMessage);
+      });
+      // Sort messages by timestamp, assuming timestamp is a number or can be converted
+      messages.sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+      setChatMessages(messages);
+      console.log('[IntelliGit-Page] Chat messages updated from Firebase for repo:', repoId, messages.length);
+    }, (error) => {
+      console.error('[IntelliGit-Page] Error fetching chat messages from Firebase:', error);
+      setChatError(`Failed to load chat: ${error.message}`);
+    });
+
+    return () => {
+      console.log('[IntelliGit-Page] Removing Firebase listener for chat messages for repo:', repoId);
+      off(chatMessagesRef, 'value', listener);
+    };
+  }, [getRepoId, repositoryConnected, setChatMessages, setChatError]); // Added dependencies
+
 
   const handleMessage = useCallback((event: MessageEvent) => {
     const message = event.data;
@@ -534,6 +626,16 @@ export default function CodeCollabAIPage() {
       setRepositoryConnected(true);
       console.log(`[IntelliGit-Page] Successfully loaded data for ${owner}/${repo}`);
 
+      // Save the successfully connected repository as a preference
+      if (isUserAuthenticated && githubUserName) {
+        const userPrefsRepoRef = ref(db, `userPreferences/${githubUserName}/lastRepo`);
+        set(userPrefsRepoRef, `${owner}/${repo}`)
+          .then(() => console.log(`[IntelliGit-Page] Saved lastRepo preference: ${owner}/${repo}`))
+          .catch(error => {
+            console.warn('[IntelliGit-Page] Failed to save lastRepo preference:', error);
+          });
+      }
+
     } catch (error: any) {
       console.error(`[IntelliGit-Page] Error loading repository data for ${owner}/${repo}:`, error);
       setErrorMessage(`Failed to load repository data: ${error.message}`);
@@ -551,6 +653,35 @@ export default function CodeCollabAIPage() {
       }
     }
   }, [githubToken, autoDetectedOwner, autoDetectedRepo, repositoryConnected, currentRepoOwner, currentRepoName, loadRepositoryData]);
+
+  // Effect to load last used repository from Firebase if not auto-detected
+  useEffect(() => {
+    const loadLastRepoPreference = async () => {
+      // Check if user is authenticated, has a username and token,
+      // no repo is auto-detected by the extension, and no repo is currently connected.
+      if (isUserAuthenticated && githubUserName && githubToken && !autoDetectedOwner && !autoDetectedRepo && !repositoryConnected) {
+        console.log('[IntelliGit-Page] Checking Firebase for last used repository preference...');
+        const userPrefsRepoRef = ref(db, `userPreferences/${githubUserName}/lastRepo`);
+        try {
+          const snapshot = await get(userPrefsRepoRef); // Using get for one-time read
+          const lastRepoFullName = snapshot.val();
+          if (lastRepoFullName && typeof lastRepoFullName === 'string') {
+            const [owner, repoName] = lastRepoFullName.split('/');
+            if (owner && repoName) {
+              console.log(`[IntelliGit-Page] Found last used repo from Firebase: ${owner}/${repoName}. Attempting to load.`);
+              await loadRepositoryData(owner, repoName, githubToken);
+            }
+          } else {
+            console.log('[IntelliGit-Page] No last used repository preference found in Firebase.');
+          }
+        } catch (error) {
+          console.error('[IntelliGit-Page] Error fetching lastRepo preference:', error);
+        }
+      }
+    };
+
+    loadLastRepoPreference();
+  }, [isUserAuthenticated, githubUserName, githubToken, autoDetectedOwner, autoDetectedRepo, repositoryConnected, loadRepositoryData]);
 
   const handleOpenSettingsDialog = () => {
     if (currentRepoOwner && currentRepoName) {
@@ -754,6 +885,14 @@ export default function CodeCollabAIPage() {
         selectedBranch={selectedBranch}
         onBranchChange={handleBranchChange}
         contributors={contributors}
+        // Chat props
+        chatMessages={chatMessages}
+        chatInput={chatInput}
+        onChatInputChange={(e: React.ChangeEvent<HTMLInputElement>) => setChatInput(e.target.value)}
+        onSendChatMessage={handleSendChatMessage}
+        isSendingChatMessage={isSendingMessage}
+        chatError={chatError}
+        currentUserName={githubUserName}
       />
       {selectedCommit && (
         <CommitDetailDialog
