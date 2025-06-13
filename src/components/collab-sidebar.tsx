@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, UserPlus } from 'lucide-react';
-import type { Collaborator, Contributor } from '@/types';
+import type { Collaborator, Contributor, Branch } from '@/types'; // Using mock data
 import { mockCollaborators } from '@/lib/mock-data'; // Using mock data
 
 interface CollaboratorItemProps {
@@ -40,14 +40,26 @@ const CollaboratorItem: React.FC<CollaboratorItemProps> = ({ contributor, onCont
 
 export interface CollabSidebarProps {
   contributors: Contributor[];
-  onContributorClick: (contributor: Contributor) => void; // Added this prop
-  onAddMemberClick: () => void; // New prop for Add Member button click
+  onContributorClick: (contributor: Contributor) => void;
+  onAddMemberClick: () => void;
+  branches: Branch[]; // Added
+  selectedBranch: string | null; // Added
+  onBranchChange: (branchName: string) => void; // Added
+  repositoryConnected: boolean; // Added
+  currentRepoName: string | null; // Added
+  currentRepoOwner: string | null; // Added
 }
 
 export function CollabSidebar({ 
   contributors = [], 
   onContributorClick,
-  onAddMemberClick // New prop
+  onAddMemberClick,
+  branches, // Added
+  selectedBranch, // Added
+  onBranchChange, // Added
+  repositoryConnected, // Added
+  currentRepoName, // Added
+  currentRepoOwner // Added
 }: CollabSidebarProps) {
   const [searchTerm, setSearchTerm] = useState('');
 

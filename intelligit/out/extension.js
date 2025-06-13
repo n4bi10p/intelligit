@@ -60,6 +60,19 @@ function activate(context) {
         async (message) => {
           console.log("[IntelliGit] Message received from webview:", message);
           switch (message.command) {
+            case "requestGitHubToken":
+              try {
+                const session = await vscode.authentication.getSession("github", ["repo", "read:user"], { createIfNone: true });
+                if (session) {
+                  panel.webview.postMessage({ command: "githubToken", token: session.accessToken });
+                } else {
+                  panel.webview.postMessage({ command: "githubToken", error: "GitHub authentication failed." });
+                }
+              } catch (error) {
+                console.error("[IntelliGit] GitHub authentication error:", error);
+                panel.webview.postMessage({ command: "githubToken", error: error.message || "GitHub authentication failed." });
+              }
+              return;
             case "helloFromWebview":
               vscode.window.showInformationMessage(`Received: ${message.text}`);
               const responsePayload = {

@@ -1,6 +1,7 @@
 {
 	"compilerOptions": {
 		"module": "Node16",
+		"moduleResolution": "Node16", // Added for consistency with Node16 module system
 		"target": "ES2022",
 		"lib": [
 			"ES2022",
@@ -13,5 +14,17 @@
 		// "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
 		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
 		// "noUnusedParameters": true,  /* Report errors on unused parameters. */
-	}
+		"types": [
+			"mocha",
+			"node"
+		],
+		"skipLibCheck": true // To help with type errors from node_modules
+	},
+	"include": [
+		"src"
+	],
+	"exclude": [
+		"node_modules",
+		".vscode-test"
+	]
 }

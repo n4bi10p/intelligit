@@ -14,6 +14,7 @@ import { Branch, Contributor } from '../types'; // Import Branch type and Contri
 
 interface MainPanelProps {
   gitLog: Commit[];
+  gitLogError?: string | null; // Added gitLogError prop
   onOpenSettingsDialog: () => void;
   commitCurrentPage: number;
   totalCommitPages: number;
