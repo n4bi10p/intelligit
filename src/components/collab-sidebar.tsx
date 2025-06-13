@@ -39,19 +39,15 @@ const CollaboratorItem: React.FC<CollaboratorItemProps> = ({ contributor, onCont
 };
 
 export interface CollabSidebarProps {
-  repoName?: string; // Made repoName optional as it's not used in the component
   contributors: Contributor[];
   onContributorClick: (contributor: Contributor) => void; // Added this prop
   onAddMemberClick: () => void; // New prop for Add Member button click
-  onSettingsClick: () => void; // Added for consistency, though not used in current UI directly
 }
 
 export function CollabSidebar({ 
-  // repoName, // repoName is not directly used in this component's rendering logic
   contributors = [], 
   onContributorClick,
-  onAddMemberClick, // New prop
-  // onSettingsClick // Not used directly, but kept for prop consistency if needed later
+  onAddMemberClick // New prop
 }: CollabSidebarProps) {
   const [searchTerm, setSearchTerm] = useState('');
 

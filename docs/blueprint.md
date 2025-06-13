@@ -1,4 +1,4 @@
-# **App Name**: IntelliGit
+# **App Name**: CodeCollab AI
 
 ## Core Features:
 
