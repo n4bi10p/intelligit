@@ -713,6 +713,27 @@ export async function activate(context: vscode.ExtensionContext) { // Made activ
                                     }
                                 }
                                 break;
+                            // --- Firebase User Session Persistence ---
+                            case 'saveUserSession': {
+                                const { userId, session } = message;
+                                if (userId && session) {
+                                    await saveUserSessionToFirebase(userId, session);
+                                    currentWebview.postMessage({ command: 'userSessionSaved', success: true });
+                                } else {
+                                    currentWebview.postMessage({ command: 'userSessionSaved', success: false, error: 'Missing userId or session.' });
+                                }
+                                break;
+                            }
+                            case 'loadUserSession': {
+                                const { userId } = message;
+                                if (userId) {
+                                    const session = await loadUserSessionFromFirebase(userId);
+                                    currentWebview.postMessage({ command: 'userSessionLoaded', session });
+                                } else {
+                                    currentWebview.postMessage({ command: 'userSessionLoaded', session: null, error: 'Missing userId.' });
+                                }
+                                break;
+                            }
                         }
                     },
                     undefined,
@@ -831,4 +852,39 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri, ap
 // This method is called when your extension is deactivated
 export async function deactivate() { // Made deactivate async (good practice, though not strictly needed here)
     console.log('[IntelliGit] Deactivating extension.');
+}
+
+// --- Firebase User Session Persistence ---
+/**
+ * Save the user's last connected repo session to Firestore.
+ * @param userId string (GitHub login or email)
+ * @param session { owner: string, name: string, branch?: string }
+ */
+async function saveUserSessionToFirebase(userId: string, session: { owner: string, name: string, branch?: string }) {
+  if (!db) { return; }
+  try {
+    await db.collection('userSessions').doc(userId).set({ lastSession: session }, { merge: true });
+    console.log(`[IntelliGit] Saved user session for ${userId}:`, session);
+  } catch (e) {
+    console.error(`[IntelliGit] Failed to save user session for ${userId}:`, e);
+  }
+}
+
+/**
+ * Load the user's last connected repo session from Firestore.
+ * @param userId string (GitHub login or email)
+ * @returns session or null
+ */
+async function loadUserSessionFromFirebase(userId: string): Promise<{ owner: string, name: string, branch?: string } | null> {
+  if (!db) { return null; }
+  try {
+    const doc = await db.collection('userSessions').doc(userId).get();
+    if (doc.exists && doc.data()?.lastSession) {
+      console.log(`[IntelliGit] Loaded user session for ${userId}:`, doc.data()?.lastSession);
+      return doc.data()?.lastSession;
+    }
+  } catch (e) {
+    console.error(`[IntelliGit] Failed to load user session for ${userId}:`, e);
+  }
+  return null;
 }

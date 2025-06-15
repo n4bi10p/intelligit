@@ -529,6 +529,26 @@ export default function CodeCollabAIPage() {
     // Note: The vscodeApiInstance is stable and defined outside, so not needed in dependency array.
   }, [currentRepoOwner, currentRepoName, repositoryConnected]);
 
+  // --- Auto-reload last connected repo session on mount ---
+  const handleSessionLoaded = useCallback((event: MessageEvent) => {
+    const message = event.data;
+    if (message && message.command === 'userSessionLoaded' && message.session && githubToken) {
+      const { owner, name, branch } = message.session;
+      loadRepositoryData(owner, name, githubToken, branch, 1);
+    }
+  }, [githubToken]);
+
+  useEffect(() => {
+    if (githubUserName) {
+      vscodeApiInstance.postMessage({ command: 'loadUserSession', userId: githubUserName });
+    }
+  }, [githubUserName]);
+
+  useEffect(() => {
+    window.addEventListener('message', handleSessionLoaded);
+    return () => window.removeEventListener('message', handleSessionLoaded);
+  }, [handleSessionLoaded]);
+
   async function fetchBranches(owner: string, repo: string, token: string): Promise<Branch[]> {
     const headers: HeadersInit = {
       'Accept': 'application/vnd.github.v3+json',
@@ -950,6 +970,21 @@ export default function CodeCollabAIPage() {
     vscodeApiInstance.postMessage({ command: 'requestRepositoryInfo' });
   };
 
+
+  // --- Save user session to extension (and Firebase) on repo/branch change ---
+useEffect(() => {
+  if (githubUserName && currentRepoOwner && currentRepoName && repositoryConnected) {
+    vscodeApiInstance.postMessage({
+      command: 'saveUserSession',
+      userId: githubUserName,
+      session: {
+        owner: currentRepoOwner,
+        name: currentRepoName,
+        branch: selectedBranch || undefined
+      }
+    });
+  }
+}, [githubUserName, currentRepoOwner, currentRepoName, selectedBranch, repositoryConnected]);
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
