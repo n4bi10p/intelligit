@@ -59,6 +59,13 @@ export interface CollabSidebarProps {
   githubUserAvatar: string | null;
   onLoginClick: () => void;
   onLogoutClick: () => void;
+  // Added missing props
+  isLoading: boolean;
+  errorMessage: string | null;
+  onOpenSettings: () => void;
+  onRetryFetchRepos: () => void;
+  onConnectRepository: () => void;
+  onDisconnectRepository: () => void;
 }
 
 export function CollabSidebar({
@@ -77,6 +84,12 @@ export function CollabSidebar({
   githubUserAvatar,
   onLoginClick,
   onLogoutClick,
+  isLoading,
+  errorMessage,
+  onOpenSettings,
+  onRetryFetchRepos,
+  onConnectRepository,
+  onDisconnectRepository,
 }: CollabSidebarProps) {
   const [searchTerm, setSearchTerm] = useState('');
 

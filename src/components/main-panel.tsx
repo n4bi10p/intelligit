@@ -22,6 +22,7 @@ interface ChatMessage {
 }
 
 interface MainPanelProps {
+  vscodeApi: { postMessage: (message: any) => void; }; // Add this line
   gitLog: Commit[];
   gitLogError?: string | null; // Added gitLogError prop
   onOpenSettingsDialog: () => void;
@@ -33,6 +34,9 @@ interface MainPanelProps {
   selectedBranch: string | null; // Added selectedBranch prop
   onBranchChange: (branchName: string) => void; // Added onBranchChange prop
   contributors: Contributor[]; // Added contributors prop
+  repositoryName: string; // Added repositoryName prop
+  currentBranchForNotification?: string | null; // Added currentBranchForNotification prop
+  repositoryConnected: boolean; // Added repositoryConnected prop
   // Chat props
   chatMessages: ChatMessage[];
   chatInput: string;
@@ -41,9 +45,12 @@ interface MainPanelProps {
   isSendingChatMessage: boolean;
   chatError: string | null;
   currentUserName: string | null;
+  repoOwner?: string; // Added
+  repoName?: string; // Added
 }
 
 export function MainPanel({ 
+  vscodeApi, // Destructure vscodeApi here
   gitLog, 
   onOpenSettingsDialog,
   commitCurrentPage,
@@ -54,6 +61,9 @@ export function MainPanel({
   selectedBranch, // Added selectedBranch prop
   onBranchChange, // Added onBranchChange prop
   contributors, // Added contributors prop
+  repositoryName, // Added repositoryName prop
+  currentBranchForNotification, // Added currentBranchForNotification prop
+  repositoryConnected, // Destructure repositoryConnected prop
   // Chat props
   chatMessages,
   chatInput,
@@ -61,11 +71,13 @@ export function MainPanel({
   onSendChatMessage,
   isSendingChatMessage,
   chatError,
-  currentUserName
+  currentUserName,
+  repoOwner,      // Destructure
+  repoName        // Destructure
 }: MainPanelProps) { 
-  console.log('[MainPanel - src/components/main-panel.tsx] Received gitLog prop with length:', gitLog?.length);
-  console.log('[MainPanel - src/components/main-panel.tsx] Received branches:', branches);
-  console.log('[MainPanel - src/components/main-panel.tsx] Received selectedBranch:', selectedBranch);
+  // console.log('[MainPanel - src/components/main-panel.tsx] Received gitLog prop with length:', gitLog?.length);
+  // console.log('[MainPanel - src/components/main-panel.tsx] Received branches:', branches);
+  // console.log('[MainPanel - src/components/main-panel.tsx] Received selectedBranch:', selectedBranch);
   const [syncStatus, setSyncStatus] = React.useState<'idle' | 'syncing' | 'synced'>('synced');
   const [activeTab, setActiveTab] = useState('activity');
 
@@ -144,7 +156,15 @@ export function MainPanel({
           )}
         </TabsContent>
         <TabsContent value="tasks" className="flex-1 overflow-auto mt-0">
-          <TasksBoard contributors={contributors} />
+          <TasksBoard 
+            contributors={contributors} 
+            vscodeApi={vscodeApi} 
+            repositoryName={repositoryName} // Pass the repositoryName prop
+            repoOwner={repoOwner} // Pass repoOwner
+            repoName={repoName}   // Pass repoName
+            currentBranch={selectedBranch}
+            assignerLogin={currentUserName} // Pass currentUserName as assignerLogin
+          />
         </TabsContent>
         <TabsContent value="chat" className="flex-1 overflow-auto mt-0">
           <CodeChat 

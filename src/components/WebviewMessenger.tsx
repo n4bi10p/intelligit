@@ -35,14 +35,14 @@ const WebviewMessenger: React.FC<WebviewMessengerProps> = ({ onGitLogDataReceive
     const [testResponse, setTestResponse] = useState<string>(''); // For the test button
 
     const sendMessageToExtension = useCallback((message: VsCodeMessage) => {
-        console.log('[IntelliGit-UI] Sending message to parent (extension host):', message);
+        // console.log('[IntelliGit-UI] Sending message to parent (extension host):', message);
         window.parent.postMessage(message, '*'); // '*' is okay for local dev, be more specific for production
     }, []);
 
     useEffect(() => {
         // Use the passed vscodeApi prop
         if (vscodeApi && !repositoryConnected) {
-            console.log('[IntelliGit-WebviewMessenger] Requesting initial git log via vscodeApi prop.');
+            // console.log('[IntelliGit-WebviewMessenger] Requesting initial git log via vscodeApi prop.');
             vscodeApi.postMessage({ command: 'getGitLog' });
         }
     }, [repositoryConnected, vscodeApi]); // Add vscodeApi to dependencies
@@ -53,7 +53,7 @@ const WebviewMessenger: React.FC<WebviewMessengerProps> = ({ onGitLogDataReceive
 
         const handleMessage = (event: MessageEvent<VsCodeMessage>) => {
             const message = event.data;
-            console.log('[IntelliGit-UI] Message received from parent (extension host or relay):', message);
+            // console.log('[IntelliGit-UI] Message received from parent (extension host or relay):', message);
 
             // It's good practice to check the origin of the message for security
             if (event.origin.startsWith('vscode-webview://')) { // Ensure message is from our webview host
@@ -69,15 +69,15 @@ const WebviewMessenger: React.FC<WebviewMessengerProps> = ({ onGitLogDataReceive
                         }
                         break;
                     case 'gitLogResponse':
-                        console.log('[IntelliGit-UI] Received gitLogResponse:', message.payload, 'Error:', message.error);
+                        // console.log('[IntelliGit-UI] Received gitLogResponse:', message.payload, 'Error:', message.error);
                         if (message.error) {
                             onGitLogDataReceived([], message.error);
                         } else {
-                            onGitLogDataReceived(message.payload as Commit[] || [], undefined);
+                            onGitLogDataReceived(message.payload as Commit[] || [], null); // Changed undefined to null
                         }
                         break;
                     default:
-                        console.log('[IntelliGit-UI] Unknown command received:', message.command);
+                        // console.log('[IntelliGit-UI] Unknown command received:', message.command);
                 }
             } else {
                 // console.warn('[IntelliGit-UI] Ignoring message from unexpected origin:', event.origin, message);

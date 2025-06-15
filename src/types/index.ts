@@ -4,18 +4,18 @@ export interface Contributor {
   login: string;
   name?: string;
   avatar_url?: string;
-  id?: number; // Keeping id for now as it might be used elsewhere, but primary key is login
-  html_url?: string; // Added
-  apiUrl?: string; // Added
-  contributions?: number; // Added
-  // Add other fields from GitHub API as needed
+  id?: number; 
+  html_url?: string; 
+  apiUrl?: string; 
+  contributions?: number; 
+  email?: string; 
 }
 
 export interface TaskAssignee {
-  login: string;
+  login: string; 
   name?: string;
   avatarUrl?: string;
-  avatarHint?: string; // Keep if used for AI hints, though ideally derived
+  email?: string; 
 }
 
 export interface Task {
@@ -23,15 +23,22 @@ export interface Task {
   title: string;
   description?: string;
   status: TaskStatus;
-  assignee?: TaskAssignee; // Updated to TaskAssignee
+  assignee?: TaskAssignee; 
+  reporter?: TaskAssignee; 
   subtasks?: { id: string; title: string; completed: boolean }[];
   dueDate?: string;
-  attachments?: { name: string; url: string }[];
-  // Add any other relevant fields
+  attachments?: { name: string; url: string }[]; 
+  priority?: 'low' | 'medium' | 'high'; 
+  label?: string; 
+  comments?: { id: string; user: TaskAssignee; text: string; timestamp: string }[]; 
+  codeSnippet?: string; 
 }
 
+// This Collaborator type is specifically for the mock data and local UI needs.
+// It might differ from the Contributor type which is closer to GitHub API structure.
 export interface Collaborator {
-  id: string;
+  id: string; // Local mock ID
+  login: string; // Added login for consistency and to resolve errors
   name: string;
   avatarUrl?: string;
   avatarHint?: string;
@@ -39,7 +46,7 @@ export interface Collaborator {
 
 export interface Activity {
   id: string;
-  user: Pick<Collaborator, 'name' | 'avatarUrl' | 'avatarHint'>;
+  user: Pick<Collaborator, 'name' | 'avatarUrl' | 'avatarHint'>; // Uses the local Collaborator type
   action: string;
   timestamp: string;
   icon?: React.ElementType;
@@ -58,7 +65,7 @@ export interface Attachment {
 
 export interface ChatMessage {
   id: string;
-  user: Pick<Collaborator, 'name' | 'avatarUrl' | 'avatarHint'>;
+  user: Pick<Collaborator, 'name' | 'avatarUrl' | 'avatarHint'>; // Uses the local Collaborator type
   content: string;
   timestamp: string;
 }

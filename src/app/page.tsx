@@ -21,8 +21,27 @@ import { Button } from "@/components/ui/button";
 import { Contributor, Branch } from '@/types';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AddMemberDialog, AddMemberDialogProps } from '@/components/AddMemberDialog'; // Import AddMemberDialog and its props
-import { SettingsDialog } from '@/components/SettingsDialog'; // Import the new SettingsDialog
+import { AddMemberDialog, AddMemberDialogProps } from '@/components/AddMemberDialog';
+import { SettingsDialog, type SettingsDialogProps } from '@/components/SettingsDialog'; // Import the new SettingsDialog and its props
+import { LoginDialog } from '@/components/LoginDialog';
+
+// Placeholder stub
+async function checkIfCollaborator(owner: string, repo: string, username: string, token: string): Promise<boolean> {
+  // console.warn(`[IntelliGit-Page] STUB: checkIfCollaborator(${owner}, ${repo}, ${username}, token) called, returning false.`);
+  // In a real implementation, this would make an API call to GitHub
+  // For example: GET /repos/{owner}/{repo}/collaborators/{username}
+  // And check for a 204 status for collaborator, 404 for not.
+  return false;
+}
+
+// Placeholder stub
+async function addRepositoryCollaborator(owner: string, repo: string, username: string, permission: string, token: string): Promise<void> {
+  // console.warn(`[IntelliGit-Page] STUB: addRepositoryCollaborator(${owner}, ${repo}, ${username}, ${permission}, token) called.`);
+  // In a real implementation, this would make an API call to GitHub
+  // For example: PUT /repos/{owner}/{repo}/collaborators/{username}
+  // with a body like { permission: "pull" } (or "push", "admin", etc.)
+  return;
+}
 
 interface RepositoryInfo {
   id: string | number;
@@ -165,10 +184,10 @@ const ContributorDetailDialog: React.FC<{
 const vscodeApiInstance = {
   postMessage: (message: any) => {
     if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-      console.log('[IntelliGit-Page] Posting message to parent (webview host):', message, 'Targeting parent origin: *');
+      // console.log('[IntelliGit-Page] Posting message to parent (webview host):', message, 'Targeting parent origin: *');
       window.parent.postMessage(message, '*');
     } else {
-      console.warn('[IntelliGit-Page] window.parent is not available or is self. Cannot post message to extension host.');
+      // console.warn('[IntelliGit-Page] window.parent is not available or is self. Cannot post message to extension host.');
     }
   }
 };
@@ -183,7 +202,7 @@ export default function CodeCollabAIPage() {
   const [selectedContributor, setSelectedContributor] = useState<Contributor | null>(null);
   const [isContributorDetailOpen, setIsContributorDetailOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [repoInput, setRepoInput] = useState('');
+  const [repoInput, setRepoInput] = useState(''); // Used by SettingsDialog
   const [githubToken, setGithubToken] = useState<string | null>(null);
   const [autoDetectedOwner, setAutoDetectedOwner] = useState<string | null>(null);
   const [autoDetectedRepo, setAutoDetectedRepo] = useState<string | null>(null);
@@ -193,21 +212,23 @@ export default function CodeCollabAIPage() {
   const [currentRepoOwner, setCurrentRepoOwner] = useState<string | null>(null);
   const [currentRepoName, setCurrentRepoName] = useState<string | null>(null);
   const [repositoryConnected, setRepositoryConnected] = useState<boolean>(false);
-  const [commitsPerPage] = useState<number>(30); // Restored
-  const [commitCurrentPage, setCommitCurrentPage] = useState<number>(1); // Restored
-  const [totalCommitPages, setTotalCommitPages] = useState<number>(1); // Restored
-  const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false); // Restored
-  const [isAddingMember, setIsAddingMember] = useState(false); // Restored
-  const [addMemberError, setAddMemberError] = useState<string | null>(null); // Restored
+  const [repositoryNameFromExtension, setRepositoryNameFromExtension] = useState<string | null>(null);
+  const [currentBranchFromExtension, setCurrentBranchFromExtension] = useState<string | null>(null);
+  const [repositoryInfoError, setRepositoryInfoError] = useState<string | null>(null);
+
+  const [commitsPerPage] = useState<number>(30);
+  const [commitCurrentPage, setCommitCurrentPage] = useState<number>(1);
+  const [totalCommitPages, setTotalCommitPages] = useState<number>(1);
+  const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false);
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [userRepositories, setUserRepositories] = useState<RepositoryInfo[]>([]);
   const [isFetchingUserRepos, setIsFetchingUserRepos] = useState<boolean>(false);
 
-  // New state for GitHub user authentication
   const [isUserAuthenticated, setIsUserAuthenticated] = useState<boolean>(false);
   const [githubUserName, setGithubUserName] = useState<string | null>(null);
   const [githubUserAvatar, setGithubUserAvatar] = useState<string | null>(null);
 
-  // New state for chat
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState<string>("");
   const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
@@ -218,7 +239,7 @@ export default function CodeCollabAIPage() {
   // Function to fetch GitHub user info
   const fetchGithubUserInfo = useCallback(async (token: string) => {
     if (!token) return;
-    console.log('[IntelliGit-Page] Fetching GitHub user info...');
+    // console.log('[IntelliGit-Page] Fetching GitHub user info...');
     try {
       const headers: HeadersInit = {
         'Accept': 'application/vnd.github.v3+json',
@@ -233,7 +254,7 @@ export default function CodeCollabAIPage() {
       setGithubUserName(userData.login); // Or userData.name if preferred
       setGithubUserAvatar(userData.avatar_url);
       setIsUserAuthenticated(true);
-      console.log('[IntelliGit-Page] Successfully fetched GitHub user info for:', userData.login);
+      // console.log('[IntelliGit-Page] Successfully fetched GitHub user info for:', userData.login);
     } catch (error: any) {
       console.error('[IntelliGit-Page] Error fetching GitHub user info:', error);
       setErrorMessage(error.message || 'Failed to fetch user info.');
@@ -245,7 +266,7 @@ export default function CodeCollabAIPage() {
 
   const fetchUserRepositories = useCallback(async (token: string) => {
     if (!token) return;
-    console.log('[IntelliGit-Page] Fetching user repositories...');
+    // console.log('[IntelliGit-Page] Fetching user repositories...');
     setIsFetchingUserRepos(true);
     setErrorMessage(null);
     try {
@@ -260,7 +281,7 @@ export default function CodeCollabAIPage() {
       }
       const data = await response.json();
       setUserRepositories(data as RepositoryInfo[]);
-      console.log('[IntelliGit-Page] Successfully fetched user repositories:', data.length);
+      // console.log('[IntelliGit-Page] Successfully fetched user repositories:', data.length);
     } catch (error: any) {
       console.error('[IntelliGit-Page] Error fetching user repositories:', error);
       setErrorMessage(error.message || 'Failed to fetch repositories.');
@@ -305,7 +326,7 @@ export default function CodeCollabAIPage() {
       const chatMessagesRef = ref(db, `chats/${repoId}`);
       await push(chatMessagesRef, messageData);
       setChatInput("");
-      console.log('[IntelliGit-Page] Chat message sent to Firebase for repo:', repoId);
+      // console.log('[IntelliGit-Page] Chat message sent to Firebase for repo:', repoId);
     } catch (error: any) {
       console.error('[IntelliGit-Page] Error sending chat message:', error);
       setChatError(`Failed to send message: ${error.message}`);
@@ -318,29 +339,29 @@ export default function CodeCollabAIPage() {
   useEffect(() => {
     const repoId = getRepoId();
     if (!repoId || !repositoryConnected) {
+      // console.log('[IntelliGit-Page] Chat: Not setting up Firebase listener, no repoId or not connected.');
       setChatMessages([]); // Clear messages if no repo or not connected
       return;
     }
 
-    console.log('[IntelliGit-Page] Setting up Firebase listener for chat messages for repo:', repoId);
+    // console.log('[IntelliGit-Page] Setting up Firebase listener for chat messages for repo:', repoId);
     const chatMessagesRef = ref(db, `chats/${repoId}`);
     
     const listener = onValue(chatMessagesRef, (snapshot: DataSnapshot) => {
       const messages: ChatMessage[] = [];
       snapshot.forEach((childSnapshot) => {
-        messages.push({ id: childSnapshot.key!, ...childSnapshot.val() } as ChatMessage);
+        messages.push({ id: childSnapshot.key!, ...childSnapshot.val() });
       });
-      // Sort messages by timestamp, assuming timestamp is a number or can be converted
+      // Sort messages by timestamp, assuming timestamp is a number (Unix ms) or can be converted
       messages.sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
       setChatMessages(messages);
-      console.log('[IntelliGit-Page] Chat messages updated from Firebase for repo:', repoId, messages.length);
     }, (error) => {
-      console.error('[IntelliGit-Page] Error fetching chat messages from Firebase:', error);
-      setChatError(`Failed to load chat: ${error.message}`);
+      console.error('[IntelliGit-Page] Firebase chat listener error:', error);
+      setChatError(`Error fetching chat messages: ${error.message}`);
     });
 
     return () => {
-      console.log('[IntelliGit-Page] Removing Firebase listener for chat messages for repo:', repoId);
+      // console.log('[IntelliGit-Page] Removing Firebase chat listener for repo:', repoId);
       off(chatMessagesRef, 'value', listener);
     };
   }, [getRepoId, repositoryConnected, setChatMessages, setChatError]); // Added dependencies
@@ -349,23 +370,23 @@ export default function CodeCollabAIPage() {
   const handleMessage = useCallback((event: MessageEvent) => {
     const message = event.data;
     // Log origin to understand it better
-    console.log(`[IntelliGit-Page] Message received. Origin: ${event.origin}, Data:`, message);
+    // console.log(`[IntelliGit-Page] Message received. Origin: ${event.origin}, Data:`, message);
 
     if (!message || !message.command) {
       return;
     }
-    console.log('[IntelliGit-Page] Received message from extension:', message);
+    // console.log('[IntelliGit-Page] Received message from extension:', message);
     switch (message.command)
      {
       case 'githubToken':
         const token = message.token as string | null;
         setGithubToken(token);
         if (token) {
-          console.log('[IntelliGit-Page] GitHub token received. Fetching user repositories.');
+          // console.log('[IntelliGit-Page] GitHub token received. Fetching user repositories.');
           fetchUserRepositories(token);
           // fetchGithubUserInfo(token); // This call can remain as a fallback or for explicit refresh
         } else {
-          console.warn('[IntelliGit-Page] Received null GitHub token.');
+          // console.warn('[IntelliGit-Page] Received null GitHub token.');
           setUserRepositories([]);
           setIsUserAuthenticated(false);
           setGithubUserName(null);
@@ -378,14 +399,14 @@ export default function CodeCollabAIPage() {
       case 'githubUserInfo': // New handler for githubUserInfo
         const userInfo = message.userInfo as { login: string; avatarUrl: string; name: string | null } | null;
         if (userInfo) {
-          console.log('[IntelliGit-Page] Received githubUserInfo from extension:', userInfo);
+          // console.log('[IntelliGit-Page] Received githubUserInfo from extension:', userInfo);
           setGithubUserName(userInfo.name || userInfo.login);
           setGithubUserAvatar(userInfo.avatarUrl);
           setIsUserAuthenticated(true);
           // Clear previous auth error if user info is successfully received
           setErrorMessage(null);
         } else {
-          console.log('[IntelliGit-Page] Received null githubUserInfo from extension.');
+          // console.log('[IntelliGit-Page] Received null githubUserInfo from extension.');
           // Potentially redundant if githubToken handler already cleared these, but ensures consistency
           setIsUserAuthenticated(false);
           setGithubUserName(null);
@@ -396,14 +417,43 @@ export default function CodeCollabAIPage() {
         }
         break;
       case 'repositoryInfo':
-        setAutoDetectedOwner(message.owner as string | null);
-        setAutoDetectedRepo(message.repo as string | null);
-        console.log(`[IntelliGit-Page] Auto-detected repository: ${message.owner}/${message.repo}`);
+        // The extension now sends repositoryName (owner/repo) and currentBranch
+        const { repositoryName, currentBranch, error: repoInfoErrorMsg } = message;
+        
+        setRepositoryNameFromExtension(repositoryName as string | null);
+        setCurrentBranchFromExtension(currentBranch as string | null);
+        setRepositoryInfoError(repoInfoErrorMsg as string | null);
+
+        if (repoInfoErrorMsg) {
+          // console.warn(`[IntelliGit-Page] Error in repositoryInfo from extension: ${repoInfoErrorMsg}`);
+        }
+
+        if (repositoryName && typeof repositoryName === 'string') {
+          const parts = repositoryName.split('/');
+          if (parts.length === 2) {
+            setAutoDetectedOwner(parts[0]);
+            setAutoDetectedRepo(parts[1]);
+            // console.log(`[IntelliGit-Page] Auto-detected repository from extension: ${parts[0]}/${parts[1]}, Branch: ${currentBranch}`);
+          } else if (repositoryName !== "N/A") {
+            // This case might be for workspace folder name when not a git repo or no remote
+            setAutoDetectedOwner(null); // No owner/repo structure
+            setAutoDetectedRepo(repositoryName); // Store the whole name as repo (e.g. workspace folder name)
+            // console.log(`[IntelliGit-Page] Auto-detected repository (workspace/fallback): ${repositoryName}, Branch: ${currentBranch}`);
+          } else { // repositoryName is "N/A"
+            setAutoDetectedOwner(null);
+            setAutoDetectedRepo(null);
+            // console.log(`[IntelliGit-Page] Repository name is N/A. Branch: ${currentBranch}`);
+          }
+        } else {
+          setAutoDetectedOwner(null);
+          setAutoDetectedRepo(null);
+          // console.log(`[IntelliGit-Page] No valid repositoryName received from extension. Branch: ${currentBranch}`);
+        }
         break;
       case 'gitLogData':
         const { commits: logData, error } = message.payload as { commits: Commit[], error?: string };
         if (repositoryConnected) {
-            console.log('[IntelliGit-Page] Ignoring local git log from WebviewMessenger as GitHub repo is connected.');
+            // console.log('[IntelliGit-Page] Ignoring local git log from WebviewMessenger as GitHub repo is connected.');
             return;
         }
         if (error) {
@@ -411,7 +461,7 @@ export default function CodeCollabAIPage() {
             setGitLogError(error);
             setGitLog([]);
         } else {
-            console.log(`[IntelliGit-Page] Git log data received (local): ${logData.length} commits`);
+            // console.log(`[IntelliGit-Page] Git log data received (local): ${logData.length} commits`);
             setGitLog(logData);
             setGitLogError(null);
             setTotalCommitPages(1); 
@@ -433,12 +483,15 @@ export default function CodeCollabAIPage() {
     setTotalCommitPages, 
     setCommitCurrentPage, 
     setSelectedBranch, 
-    fetchGithubUserInfo, // Keep fetchGithubUserInfo for now
-    setGithubUserName,    // Added
-    setGithubUserAvatar,  // Added
-    setIsUserAuthenticated, // Added
-    setErrorMessage,      // Added
-    setUserRepositories   // Added (used in githubToken case)
+    fetchGithubUserInfo,
+    setGithubUserName,
+    setGithubUserAvatar,
+    setIsUserAuthenticated,
+    setErrorMessage,
+    setUserRepositories,
+    setRepositoryNameFromExtension,
+    setCurrentBranchFromExtension,
+    setRepositoryInfoError
   ]);
 
   useEffect(() => {
@@ -450,10 +503,31 @@ export default function CodeCollabAIPage() {
 
   // Effect for initial requests to the extension, runs once on mount
   useEffect(() => {
-    console.log('[IntelliGit-Page] Component mounted. Requesting GitHub token and repository info via vscodeApiInstance...');
+    // console.log('[IntelliGit-Page] Component mounted. Requesting GitHub token and initial repository info via vscodeApiInstance...');
     vscodeApiInstance.postMessage({ command: 'requestGitHubToken' });
+    // This initial call will fetch workspace info if no GitHub repo is pre-selected/remembered,
+    // or if the extension needs to determine context without specific GitHub repo details yet.
     vscodeApiInstance.postMessage({ command: 'requestRepositoryInfo' });
-  }, []);
+  }, []); // Empty dependency array means it runs once on mount
+
+  // Effect to request repository info when a specific GitHub repo is connected or disconnected
+  useEffect(() => {
+    if (repositoryConnected && currentRepoOwner && currentRepoName) {
+      // console.log(`[IntelliGit-Page] GitHub repository connected: ${currentRepoOwner}/${currentRepoName}. Requesting specific repository info from extension.`);
+      vscodeApiInstance.postMessage({
+        command: 'requestRepositoryInfo',
+        githubRepoOwner: currentRepoOwner,
+        githubRepoName: currentRepoName,
+      });
+    } else if (!repositoryConnected && (currentRepoOwner === null || currentRepoName === null)) {
+      // This case handles when we are explicitly not connected to a specific GitHub repo,
+      // or have disconnected. Request general/workspace info.
+      // The initial on-mount request also covers the very first load.
+      // console.log('[IntelliGit-Page] No specific GitHub repository connected or explicit disconnect. Requesting general/workspace repository info.');
+      vscodeApiInstance.postMessage({ command: 'requestRepositoryInfo' });
+    }
+    // Note: The vscodeApiInstance is stable and defined outside, so not needed in dependency array.
+  }, [currentRepoOwner, currentRepoName, repositoryConnected]);
 
   async function fetchBranches(owner: string, repo: string, token: string): Promise<Branch[]> {
     const headers: HeadersInit = {
@@ -482,7 +556,7 @@ export default function CodeCollabAIPage() {
       if (!response.ok) {
           const errorData = await response.json();
           if (response.status === 403 && errorData.message?.includes("too large")) {
-              console.warn(`[IntelliGit-Page] Could not fetch contributors for ${owner}/${repo}: list is too large.`);
+              // console.warn(`[IntelliGit-Page] Could not fetch contributors for ${owner}/${repo}: list is too large.`);
               return [];
           }
           throw new Error(`GitHub API error for contributors: ${response.status} - ${errorData.message || 'Failed to fetch contributors'}`);
@@ -493,27 +567,38 @@ export default function CodeCollabAIPage() {
           login: c.login,
           avatar_url: c.avatar_url,
           html_url: c.html_url,
-          apiUrl: c.url,
+          apiUrl: c.url, // This is the user's API URL, e.g., https://api.github.com/users/snabialla
           contributions: c.contributions,
+          // email will be fetched next
       }));
 
       const detailedContributors = await Promise.all(
           initialContributors.map(async (contrib) => {
-              if (!contrib.apiUrl) return { ...contrib, name: contrib.login };
+              if (!contrib.apiUrl) return { ...contrib, name: contrib.login, email: undefined }; // Ensure email is undefined if no apiUrl
               try {
+                  // Fetch detailed user info which might include the public email
                   const userResponse = await fetch(contrib.apiUrl, { headers });
                   if (!userResponse.ok) {
-                      console.warn(`Failed to fetch details for ${contrib.login}: ${userResponse.status}`);
-                      return { ...contrib, name: contrib.login }; // Fallback name
+                      // console.warn(`Failed to fetch details for ${contrib.login}: ${userResponse.status}`);
+                      // Return basic info with existing contributions, but no email
+                      return { ...contrib, name: contrib.login, email: undefined };
                   }
                   const userData = await userResponse.json();
-                  return { ...contrib, name: userData.name || contrib.login, contributions: contrib.contributions };
+                  // userData.email might be null if not public or not set
+                  return { 
+                      ...contrib, 
+                      name: userData.name || contrib.login, 
+                      email: userData.email || undefined, // Store email if available, otherwise undefined
+                      contributions: contrib.contributions // Ensure contributions are preserved
+                  };
               } catch (err) {
                   console.error(`Error fetching details for ${contrib.login}:`, err);
-                  return { ...contrib, name: contrib.login }; // Fallback name
+                  // Fallback with existing contributions, no email
+                  return { ...contrib, name: contrib.login, email: undefined };
               }
           })
       );
+      // console.log('[IntelliGit-Page] Detailed contributors with emails (if public):', detailedContributors);
       return detailedContributors;
   }
   
@@ -534,16 +619,17 @@ export default function CodeCollabAIPage() {
       return links;
   };
 
-  const fetchCommitsForPage = async (owner: string, repo: string, page: number, perPage: number, tokenToUse: string | null, branchName?: string) => {
-      console.log(`[IntelliGit-Page] Fetching commits for ${owner}/${repo}, branch: ${branchName || 'default'}, page: ${page}, per_page: ${perPage}`);
-      setGitLogError(null);
+  const fetchCommitsForPage = async (owner: string, repo: string, page: number, perPage: number, tokenToUse: string | null, branchName?: string): Promise<{ commits: Commit[]; totalPages: number; currentPage: number } | undefined> => {
+      // console.log(`[IntelliGit-Page] Fetching commits for ${owner}/${repo}, branch: ${branchName || 'default'}, page: ${page}, per_page: ${perPage}`);
+      // setGitLogError(null); // Error will be handled by caller via return value
+
       const headers: HeadersInit = {
         'Accept': 'application/vnd.github.v3+json',
       };
       if (tokenToUse) {
         headers['Authorization'] = `token ${tokenToUse}`;
       } else {
-        console.warn("[IntelliGit-Page] No GitHub token provided for fetching commits. Public data only.");
+        // console.warn("[IntelliGit-Page] No GitHub token provided for fetching commits. Public data only.");
       }
 
       let commitsUrl = `https://api.github.com/repos/${owner}/${repo}/commits?page=${page}&per_page=${perPage}`;
@@ -561,14 +647,25 @@ export default function CodeCollabAIPage() {
         const linkHeader = commitsResponse.headers.get('Link');
         const links = parseLinkHeader(linkHeader);
         
-        if (page === 1) {
+        let calculatedTotalPages = 1;
+        if (page === 1) { // Only calculate total pages when fetching the first page
           if (links.last) {
             const lastUrl = new URL(links.last);
             const lastPage = lastUrl.searchParams.get('page');
-            setTotalCommitPages(lastPage ? parseInt(lastPage, 10) : 1);
+            calculatedTotalPages = lastPage ? parseInt(lastPage, 10) : 1;
           } else {
-            setTotalCommitPages(1);
+            // If no 'last' link, it means there's only one page or it's the only page with content.
+            // We need to check if the current page has items to determine if it's 1 or 0 (if empty).
+            // For simplicity, if no 'last' link, assume current page is the only one.
+            // This will be updated by setTotalCommitPages in loadRepositoryData based on actual commits.
+             calculatedTotalPages = 1; 
           }
+        } else {
+          // If not the first page, we don't recalculate totalPages from link headers here.
+          // It should have been set by the first page load.
+          // We will pass the existing totalCommitPages state or a similar mechanism.
+          // For now, let's rely on the caller (loadRepositoryData) to manage totalCommitPages state.
+          // This function will just return the commits for the current page.
         }
 
         const commitsData = await commitsResponse.json();
@@ -583,208 +680,178 @@ export default function CodeCollabAIPage() {
           refs: '' 
         }));
         
-        setGitLog(formattedCommits);
-        setCommitCurrentPage(page);
-        setGitLogError(null);
+        // Return the data instead of setting state here
+        return { commits: formattedCommits, totalPages: calculatedTotalPages, currentPage: page };
 
       } catch (error: any) {
         console.error(`[IntelliGit-Page] Error fetching commits from GitHub for ${owner}/${repo}:`, error);
-        setGitLogError(error.message || "Failed to fetch commits. Check console for details.");
-        setGitLog([]);
+        // setGitLogError(error.message || "Failed to fetch commits. Check console for details.");
+        // setGitLog([]);
+        return undefined; // Indicate failure
       }
   };
 
-  const loadRepositoryData = async (owner: string, repo: string, token: string, branch?: string, page?: number) => {
-    console.log(`[IntelliGit-Page] Loading repository data for ${owner}/${repo}, branch: ${branch || 'default'}, page: ${page || 1}`);
+  const loadRepositoryData = useCallback(async (paramOwner: string | null, paramRepo: string | null, token: string, branch?: string, pageToLoad?: number) => {
+    const owner = typeof paramOwner === 'string' ? paramOwner.trim() : null;
+    const repo = typeof paramRepo === 'string' ? paramRepo.trim() : null;
+
+    if (!owner || owner === "N/A" || !repo || repo === "N/A") {
+      // console.warn(`[IntelliGit-Page] Invalid or N/A owner ('${owner}') or repo ('${repo}'). Aborting loadRepositoryData.`);
+      setRepositoryConnected(false);
+      setCurrentRepoOwner(null);
+      setCurrentRepoName(null);
+      setGitLog([]);
+      setContributors([]);
+      setBranches([]);
+      setIsLoading(false);
+      if ((paramOwner && String(paramOwner).trim() === "N/A") || (paramRepo && String(paramRepo).trim() === "N/A")) {
+        setErrorMessage("Repository information is N/A. Cannot load data.");
+      } else {
+        setErrorMessage("Repository owner or name is invalid or missing. Cannot load data.");
+      }
+      return;
+    }
+
+    // console.log(`[IntelliGit-Page] Loading repository data for ${owner}/${repo}, branch: ${branch || 'default'}, page: ${pageToLoad || commitCurrentPage}`);
     setIsLoading(true);
     setErrorMessage(null);
     setGitLogError(null);
 
     try {
-      const branchesData = await fetchBranches(owner, repo, token);
-      setBranches(branchesData);
-      const currentBranch = branch || branchesData.find(b => b.name === 'main' || b.name === 'master')?.name || (branchesData.length > 0 ? branchesData[0].name : null);
-      setSelectedBranch(currentBranch);
+      const tokenToUse = token; 
+      if (!tokenToUse) {
+        throw new Error("GitHub token is not available.");
+      }
 
-      if (!currentBranch) {
-        console.warn(`[IntelliGit-Page] No branches found or default branch could not be determined for ${owner}/${repo}`);
+      // Determine the branch to use for fetching commits
+      const effectiveBranch = branch || selectedBranch || undefined;
+      // Determine the page to load for commits
+      const currentPageForCommits = pageToLoad || (branch ? 1 : commitCurrentPage);
+
+      const [fetchedBranches, fetchedContributorsData, fetchedCommitsResult] = await Promise.all([
+        fetchBranches(owner!, repo!, tokenToUse), // Added non-null assertion as owner/repo are validated before this point
+        fetchContributors(owner!, repo!, tokenToUse), // Added non-null assertion
+        fetchCommitsForPage(owner!, repo!, currentPageForCommits, commitsPerPage, tokenToUse, effectiveBranch), // Added non-null assertion
+      ]);
+
+      setBranches(fetchedBranches);
+      let newSelectedBranch = selectedBranch;
+
+      if (fetchedBranches.length > 0) {
+        if (branch && fetchedBranches.some(b => b.name === branch)) { // If a specific branch was requested and exists
+          newSelectedBranch = branch;
+        } else if (!selectedBranch || !fetchedBranches.some(b => b.name === selectedBranch)) { // If no branch selected or current selection is invalid
+          const mainBranch = fetchedBranches.find(b => b.name === 'main') || fetchedBranches.find(b => b.name === 'master');
+          newSelectedBranch = mainBranch ? mainBranch.name : fetchedBranches[0].name;
+        }
+      } else {
+        newSelectedBranch = null; // No branches found
+      }
+      setSelectedBranch(newSelectedBranch);
+      
+      if (fetchedCommitsResult) {
+        setGitLog(fetchedCommitsResult.commits);
+        if (fetchedCommitsResult.currentPage === 1) {
+            setTotalCommitPages(fetchedCommitsResult.totalPages);
+        }
+        setCommitCurrentPage(fetchedCommitsResult.currentPage);
+        setGitLogError(null);
+      } else {
+        setGitLogError(`Failed to fetch commits for ${owner}/${repo}.`);
         setGitLog([]);
         setTotalCommitPages(1);
         setCommitCurrentPage(1);
       }
 
-      const targetPage = page || 1;
-      if (currentBranch) {
-        await fetchCommitsForPage(owner, repo, targetPage, commitsPerPage, token, currentBranch);
-      }
-
-      const contributorsData = await fetchContributors(owner, repo, token);
-      setContributors(contributorsData);
-
+      setContributors(fetchedContributorsData);
       setCurrentRepoOwner(owner);
       setCurrentRepoName(repo);
       setRepositoryConnected(true);
-      console.log(`[IntelliGit-Page] Successfully loaded data for ${owner}/${repo}`);
-
-      // Save the successfully connected repository as a preference
-      if (isUserAuthenticated && githubUserName) {
-        const userPrefsRepoRef = ref(db, `userPreferences/${githubUserName}/lastRepo`);
-        set(userPrefsRepoRef, `${owner}/${repo}`)
-          .then(() => console.log(`[IntelliGit-Page] Saved lastRepo preference: ${owner}/${repo}`))
-          .catch(error => {
-            console.warn('[IntelliGit-Page] Failed to save lastRepo preference:', error);
-          });
-      }
-
     } catch (error: any) {
       console.error(`[IntelliGit-Page] Error loading repository data for ${owner}/${repo}:`, error);
-      setErrorMessage(`Failed to load repository data: ${error.message}`);
-      setRepositoryConnected(false);
+      setErrorMessage(error.message || "Failed to load repository data. Check console for details.");
+      setGitLog([]);
+      setContributors([]);
+      setBranches([]);
+      setTotalCommitPages(1);
+      setCommitCurrentPage(1);
     } finally {
       setIsLoading(false);
     }
-  };
-  
-  useEffect(() => {
-    if (githubToken && autoDetectedOwner && autoDetectedRepo) {
-      if (!repositoryConnected || currentRepoOwner !== autoDetectedOwner || currentRepoName !== autoDetectedRepo) {
-        console.log(`[IntelliGit-Page] Auto-loading data for ${autoDetectedOwner}/${autoDetectedRepo}.`);
-        loadRepositoryData(autoDetectedOwner, autoDetectedRepo, githubToken);
-      }
-    }
-  }, [githubToken, autoDetectedOwner, autoDetectedRepo, repositoryConnected, currentRepoOwner, currentRepoName, loadRepositoryData]);
+  }, [
+    commitsPerPage, fetchBranches, fetchContributors, 
+    setBranches, setSelectedBranch, setGitLog, setTotalCommitPages, setCommitCurrentPage, setContributors, 
+    setCurrentRepoOwner, setCurrentRepoName, setRepositoryConnected, setIsLoading, setErrorMessage, setGitLogError,
+    commitCurrentPage, selectedBranch 
+  ]);
 
-  // Effect to load last used repository from Firebase if not auto-detected
-  useEffect(() => {
-    const loadLastRepoPreference = async () => {
-      // Check if user is authenticated, has a username and token,
-      // no repo is auto-detected by the extension, and no repo is currently connected.
-      if (isUserAuthenticated && githubUserName && githubToken && !autoDetectedOwner && !autoDetectedRepo && !repositoryConnected) {
-        console.log('[IntelliGit-Page] Checking Firebase for last used repository preference...');
-        const userPrefsRepoRef = ref(db, `userPreferences/${githubUserName}/lastRepo`);
-        try {
-          const snapshot = await get(userPrefsRepoRef); // Using get for one-time read
-          const lastRepoFullName = snapshot.val();
-          if (lastRepoFullName && typeof lastRepoFullName === 'string') {
-            const [owner, repoName] = lastRepoFullName.split('/');
-            if (owner && repoName) {
-              console.log(`[IntelliGit-Page] Found last used repo from Firebase: ${owner}/${repoName}. Attempting to load.`);
-              await loadRepositoryData(owner, repoName, githubToken);
-            }
-          } else {
-            console.log('[IntelliGit-Page] No last used repository preference found in Firebase.');
-          }
-        } catch (error) {
-          console.error('[IntelliGit-Page] Error fetching lastRepo preference:', error);
-        }
-      }
-    };
-
-    loadLastRepoPreference();
-  }, [isUserAuthenticated, githubUserName, githubToken, autoDetectedOwner, autoDetectedRepo, repositoryConnected, loadRepositoryData]);
-
+  // Handler for opening the settings dialog
   const handleOpenSettingsDialog = () => {
-    if (currentRepoOwner && currentRepoName) {
-      setRepoInput(`${currentRepoOwner}/${currentRepoName}`);
-    } else if (autoDetectedOwner && autoDetectedRepo) {
-      setRepoInput(`${autoDetectedOwner}/${autoDetectedRepo}`);
-    } else if (userRepositories.length > 0 && !repoInput) {
-      setRepoInput(userRepositories[0].full_name);
-    }
-    setErrorMessage(null);
     setIsSettingsOpen(true);
-  };
-
-  const handleConnectToRepo = async () => {
-    console.log("[IntelliGit-Page] Attempting to connect to repo via dialog. Input:", repoInput);
-    setErrorMessage(null);
-
-    if (!githubToken) {
-      setErrorMessage("GitHub token not available. Please ensure the extension is authenticated.");
-      return;
-    }
-
-    if (!repoInput || repoInput.trim() === '') {
-      setErrorMessage("Repository input cannot be empty.");
-      return;
-    }
-
-    let owner = '';
-    let repo = '';
-    const trimmedInput = repoInput.trim();
-
-    if (trimmedInput.includes('github.com/')) {
-        try {
-            const url = new URL(trimmedInput);
-            const pathParts = url.pathname.split('/').filter(Boolean);
-            if (pathParts.length >= 2) {
-                owner = pathParts[0];
-                repo = pathParts[1].replace('.git', '');
-            }
-        } catch (e) {
-            console.error("[IntelliGit-Page] Error parsing GitHub URL:", e);
-        }
-    } else if (trimmedInput.includes('/')) {
-        const parts = trimmedInput.split('/');
-        if (parts.length === 2 && parts[0] && parts[1]) {
-            owner = parts[0];
-            repo = parts[1].replace('.git', ''); // Remove .git if present
-        }
-    }
-
-    if (!owner || !repo) {
-      setErrorMessage("Invalid repository format. Use 'owner/repo' or a full GitHub URL.");
-      return;
-    }
-
-    console.log(`[IntelliGit-Page] Parsed owner: ${owner}, repo: ${repo} from dialog input.`);
-    await loadRepositoryData(owner, repo, githubToken);
-    
-    if (!errorMessage) { 
-        setIsSettingsOpen(false); 
+    if (githubToken && !userRepositories.length && !isFetchingUserRepos) {
+        fetchUserRepositories(githubToken);
     }
   };
-  
+
+  // Handler for saving settings (connecting to a new repo)
+  const handleSaveSettings = (newOwner: string, newRepo: string) => {
+    if (githubToken && newOwner && newRepo) {
+      loadRepositoryData(newOwner, newRepo, githubToken, undefined, 1);
+    }
+    setIsSettingsOpen(false);
+  };
+
+  // Handler for commit click to open detail dialog
+  const handleCommitClick = (commit: Commit) => {
+    setSelectedCommit(commit);
+    setIsCommitDetailOpen(true);
+  };
+
+  // Handler for contributor click to open detail dialog
+  const handleContributorClick = (contributor: Contributor) => {
+    setSelectedContributor(contributor);
+    setIsContributorDetailOpen(true);
+  };
+
+  // Handler for branch change
+  const handleBranchChange = (branchName: string) => {
+    if (currentRepoOwner && currentRepoName && githubToken) {
+      setSelectedBranch(branchName);
+      // Reload commits for the new branch, starting from page 1
+      loadRepositoryData(currentRepoOwner, currentRepoName, githubToken, branchName, 1);
+    }
+  };
+
+  // Handler for commit page change
+  const handleCommitPageChange = (newPage: number) => {
+    if (currentRepoOwner && currentRepoName && githubToken) {
+      setCommitCurrentPage(newPage);
+      loadRepositoryData(currentRepoOwner, currentRepoName, githubToken, selectedBranch || undefined, newPage);
+    }
+  };
+
+  // Handler for adding a new member
   const handleAddMember = async (username: string, permission: PermissionLevel) => {
-    if (!username) {
-      setAddMemberError("Username cannot be empty.");
-      return;
-    }
-    if (!currentRepoOwner || !currentRepoName) {
-      setAddMemberError("Repository not connected.");
-      return;
-    }
-    if (!githubToken) {
-      setAddMemberError("GitHub token not available.");
+    if (!currentRepoOwner || !currentRepoName || !githubToken) {
+      setAddMemberError("Repository information or GitHub token is missing.");
       return;
     }
     setIsAddingMember(true);
     setAddMemberError(null);
-
     try {
-      const headers: HeadersInit = {
-        'Accept': 'application/vnd.github.v3+json',
-        'Authorization': `token ${githubToken}`,
-        'Content-Type': 'application/json',
-      };
-      const response = await fetch(`https://api.github.com/repos/${currentRepoOwner}/${currentRepoName}/collaborators/${username}`,
-        {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({ permission }),
-        }
-      );
+      // First, check if the user is already a collaborator (optional, GitHub API might handle this)
+      // const isAlreadyCollaborator = await checkIfCollaborator(currentRepoOwner, currentRepoName, username, githubToken);
+      // if (isAlreadyCollaborator) {
+      //   setAddMemberError(`User ${username} is already a collaborator.`);
+      //   setIsAddingMember(false);
+      //   return;
+      // }
 
-      if (response.status === 201) {
-        console.log(`[IntelliGit-Page] Successfully invited ${username}.`);
-        setIsAddMemberDialogOpen(false);
-      } else if (response.status === 204) {
-         console.log(`[IntelliGit-Page] ${username} is already a collaborator or invitation is pending.`);
-         setAddMemberError(`${username} is already a collaborator or an invitation is pending.`);
-      } else {
-        const errorData = await response.json();
-        throw new Error(`GitHub API error: ${response.status} - ${errorData.message || 'Failed to add member'}`);
-      }
+      await addRepositoryCollaborator(currentRepoOwner, currentRepoName, username, permission, githubToken);
+      // Potentially re-fetch contributors or update UI optimistically
+      // For now, just close dialog and maybe show a success message (via toast or similar)
+      setIsAddMemberDialogOpen(false);
+      // Consider adding a success toast here
     } catch (error: any) {
       console.error("[IntelliGit-Page] Error adding member:", error);
       setAddMemberError(error.message || "Failed to add member.");
@@ -793,140 +860,197 @@ export default function CodeCollabAIPage() {
     }
   };
 
-  const handleCommitClick = (commit: Commit) => {
-    setSelectedCommit(commit);
-    setIsCommitDetailOpen(true);
+  // Props for AddMemberDialog
+  const addMemberDialogProps: AddMemberDialogProps = {
+    open: isAddMemberDialogOpen, // Changed from isOpen to open
+    onOpenChange: setIsAddMemberDialogOpen,
+    onAddMember: handleAddMember,
+    isLoading: isAddingMember,
+    error: addMemberError,
   };
 
-  const handleContributorClick = (contributor: Contributor) => {
-    setSelectedContributor(contributor);
-    setIsContributorDetailOpen(true);
+  // Props for SettingsDialog
+  const settingsDialogProps: SettingsDialogProps = {
+    open: isSettingsOpen, // Changed from isOpen to open
+    onOpenChange: setIsSettingsOpen,
+    repoInput: repoInput, // Pass repoInput
+    setRepoInput: setRepoInput, // Pass setRepoInput
+    onConnect: () => { // Define onConnect
+      if (repoInput) {
+        const [owner, repo] = repoInput.split('/');
+        if (owner && repo && githubToken) {
+          loadRepositoryData(owner, repo, githubToken, undefined, 1);
+          setIsSettingsOpen(false); // Close dialog on connect
+        } else if (!githubToken) {
+          setErrorMessage("GitHub token not available. Please authenticate via the extension.");
+        } else {
+          setErrorMessage("Invalid repository format. Please use 'owner/repo'.");
+        }
+      }
+    },
+    userRepositories: userRepositories,
+    isFetchingUserRepos: isFetchingUserRepos,
+    onRepoSelect: (selectedRepoFullName: string) => {
+        setRepoInput(selectedRepoFullName); // Update repoInput when a repo is selected from the list
+        // Optionally, connect immediately on select, or wait for "Connect" button
+        // For now, just updates the input. User clicks "Connect".
+    },
+    error: errorMessage, 
+    isLoading: isLoading || isFetchingUserRepos,
   };
 
-  const handleBranchChange = async (branchName: string) => {
-    if (currentRepoOwner && currentRepoName && githubToken) {
-      setSelectedBranch(branchName);
-      setCommitCurrentPage(1); // Reset to first page on branch change
-      await loadRepositoryData(currentRepoOwner, currentRepoName, githubToken, branchName, 1);
-    }
-  };
-
-  const handlePageChange = (newPage: number) => {
-    if (currentRepoOwner && currentRepoName && githubToken && selectedBranch) {
-      fetchCommitsForPage(currentRepoOwner, currentRepoName, newPage, commitsPerPage, githubToken, selectedBranch);
-    }
-  };
+  // Placeholder for LoginDialog state and handlers
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
   
-  const handleOpenAddMemberDialog = () => {
-    setAddMemberError(null); 
-    setIsAddMemberDialogOpen(true);
-  };
-
-  // Handlers for login/logout
-  const handleGitHubLogin = () => {
-    console.log('[IntelliGit-Page] Requesting GitHub login via extension (using vscodeApiInstance)...');
-    vscodeApiInstance.postMessage({ command: 'requestGitHubLogin' });
-  };
-
-  const handleGitHubLogout = () => {
-    console.log('[IntelliGit-Page] Requesting GitHub logout via extension (using vscodeApiInstance)...');
-    vscodeApiInstance.postMessage({ command: 'requestGitHubLogout' });
-    // Clear local auth state immediately
+  // Placeholder for logout handler
+  const handleLogout = () => {
+    // console.log("[IntelliGit-Page] Logout clicked. Clearing token and user info.");
+    vscodeApiInstance.postMessage({ command: 'clearGitHubToken' });
     setGithubToken(null);
     setIsUserAuthenticated(false);
     setGithubUserName(null);
     setGithubUserAvatar(null);
     setUserRepositories([]);
-    // Optionally, clear repository data as well
+    // Optionally, disconnect repository as well or prompt user
+    // setCurrentRepoOwner(null);
+    // setCurrentRepoName(null);
+    // setRepositoryConnected(false);
     // setGitLog([]);
     // setContributors([]);
     // setBranches([]);
-    // setCurrentRepoName(null);
-    // setCurrentRepoOwner(null);
-    // setRepositoryConnected(false);
+    // setErrorMessage("Logged out. Connect to GitHub to continue.");
   };
 
+  // Placeholder for retry fetch repos
+  const handleRetryFetchRepos = () => {
+    if (githubToken) {
+      fetchUserRepositories(githubToken);
+    }
+  };
+
+  // Placeholder for connect repository (used by CollabSidebar if it has a direct connect button)
+  const handleConnectRepository = () => {
+    setIsSettingsOpen(true); // Open settings to connect
+  };
+
+  // Placeholder for disconnect repository
+  const handleDisconnectRepository = () => {
+    // console.log("[IntelliGit-Page] Disconnect repository clicked.");
+    setCurrentRepoOwner(null);
+    setCurrentRepoName(null);
+    setRepositoryConnected(false);
+    setGitLog([]);
+    setContributors([]); // Clear contributors
+    setBranches([]);
+    setSelectedBranch(null);
+    setRepositoryNameFromExtension(null); // Clear extension-provided name
+    setCurrentBranchFromExtension(null);  // Clear extension-provided branch
+    setErrorMessage("Repository disconnected.");
+    // Request general workspace info again
+    vscodeApiInstance.postMessage({ command: 'requestRepositoryInfo' });
+  };
+
+
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <WebviewMessenger
-        vscodeApi={vscodeApiInstance} // Pass the API object
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <WebviewMessenger 
+        vscodeApi={vscodeApiInstance} 
         onGitLogDataReceived={(commits, error) => {
-            // The if(handleMessage) check is removed as handleMessage should always be available.
-            handleMessage({ data: { command: 'gitLogData', payload: { commits, error } } } as MessageEvent);
+          if (!repositoryConnected) { // Only use this if no GitHub repo is connected
+            if (error) {
+              setGitLogError(error);
+              setGitLog([]);
+            } else {
+              setGitLog(commits);
+              setGitLogError(null);
+              setTotalCommitPages(1); // For local logs, assume one page
+              setCommitCurrentPage(1);
+            }
+          }
         }}
         repositoryConnected={repositoryConnected}
       />
       <CollabSidebar
-        contributors={contributors}
-        branches={branches}
-        selectedBranch={selectedBranch}
-        onBranchChange={handleBranchChange}
+        contributors={contributors} // Changed from currentContributors
         onContributorClick={handleContributorClick}
-        onAddMemberClick={handleOpenAddMemberDialog}
+        onAddMemberClick={() => setIsAddMemberDialogOpen(true)}
+        branches={branches}
+        selectedBranch={currentBranchFromExtension || selectedBranch} // Prefer extension's branch, fallback to page's selectedBranch
+        onBranchChange={handleBranchChange}
         repositoryConnected={repositoryConnected}
         currentRepoName={currentRepoName}
         currentRepoOwner={currentRepoOwner}
-        // Pass new props for auth
         isUserAuthenticated={isUserAuthenticated}
         githubUserName={githubUserName}
         githubUserAvatar={githubUserAvatar}
-        onLoginClick={handleGitHubLogin}
-        onLogoutClick={handleGitHubLogout}
+        onLoginClick={() => setIsLoginDialogOpen(true)}
+        onLogoutClick={handleLogout}
+        isLoading={isLoading || isFetchingUserRepos} // Combined loading states
+        errorMessage={errorMessage}
+        onOpenSettings={handleOpenSettingsDialog} // Corrected prop name
+        onRetryFetchRepos={handleRetryFetchRepos}
+        onConnectRepository={handleConnectRepository}
+        onDisconnectRepository={handleDisconnectRepository}
       />
       <MainPanel
-        gitLog={gitLog}
+        vscodeApi={vscodeApiInstance} 
+        gitLog={gitLog} 
         gitLogError={gitLogError}
-        onOpenSettingsDialog={handleOpenSettingsDialog}
+        onOpenSettingsDialog={handleOpenSettingsDialog} 
         commitCurrentPage={commitCurrentPage}
         totalCommitPages={totalCommitPages}
-        onCommitPageChange={handlePageChange}
+        onCommitPageChange={handleCommitPageChange}
         onCommitClick={handleCommitClick}
         branches={branches}
         selectedBranch={selectedBranch}
         onBranchChange={handleBranchChange}
         contributors={contributors}
+        repositoryName={repositoryNameFromExtension || (currentRepoOwner && currentRepoName ? `${currentRepoOwner}/${currentRepoName}` : "N/A")}
+        currentBranchForNotification={currentBranchFromExtension || selectedBranch}
+        repositoryConnected={repositoryConnected}
         // Chat props
         chatMessages={chatMessages}
         chatInput={chatInput}
-        onChatInputChange={(e: React.ChangeEvent<HTMLInputElement>) => setChatInput(e.target.value)}
+        onChatInputChange={(e) => setChatInput(e.target.value)}
         onSendChatMessage={handleSendChatMessage}
         isSendingChatMessage={isSendingMessage}
         chatError={chatError}
         currentUserName={githubUserName}
       />
+
+      {/* Dialogs */}
       {selectedCommit && (
-        <CommitDetailDialog
-          commit={selectedCommit}
-          open={isCommitDetailOpen}
-          onOpenChange={setIsCommitDetailOpen}
+        <CommitDetailDialog 
+          commit={selectedCommit} 
+          open={isCommitDetailOpen} 
+          onOpenChange={setIsCommitDetailOpen} 
         />
       )}
       {selectedContributor && (
-        <ContributorDetailDialog
-          contributor={selectedContributor}
-          open={isContributorDetailOpen}
-          onOpenChange={setIsContributorDetailOpen}
+        <ContributorDetailDialog 
+          contributor={selectedContributor} 
+          open={isContributorDetailOpen} 
+          onOpenChange={setIsContributorDetailOpen} 
         />
       )}
-      <SettingsDialog
-        open={isSettingsOpen}
-        onOpenChange={setIsSettingsOpen}
-        repoInput={repoInput}
-        setRepoInput={setRepoInput}
-        onConnect={handleConnectToRepo}
-        userRepositories={userRepositories}
-        isFetchingUserRepos={isFetchingUserRepos}
-        onRepoSelect={(selectedRepoFullName: string) => setRepoInput(selectedRepoFullName)}
-        error={errorMessage}
-        isLoading={isLoading || isFetchingUserRepos}
-      />
-      <AddMemberDialog
-        open={isAddMemberDialogOpen}
-        onOpenChange={setIsAddMemberDialogOpen}
-        onAddMember={handleAddMember}
-        isLoading={isAddingMember}
-        error={addMemberError}
-      />
+      <AddMemberDialog {...addMemberDialogProps} />
+      <SettingsDialog {...settingsDialogProps} />
+
+      {/* Global Loading Indicator (optional) */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-background p-4 rounded-lg shadow-xl">
+            Loading repository data...
+          </div>
+        </div>
+      )}
+      {/* Global Error Message (optional) */}
+      {errorMessage && !isSettingsOpen && ( // Don't show global error if settings dialog is open (it shows its own errors)
+        <div className="fixed bottom-4 right-4 bg-destructive text-destructive-foreground p-4 rounded-lg shadow-xl z-50">
+          Error: {errorMessage}
+          <Button variant="ghost" size="sm" onClick={() => setErrorMessage(null)} className="ml-2">Dismiss</Button>
+        </div>
+      )}
     </div>
   );
 }

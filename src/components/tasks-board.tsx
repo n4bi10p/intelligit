@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { nanoid } from 'nanoid';
+import { useToast } from "@/hooks/use-toast"; // Corrected import path if needed
 
 // Helper function to reorder array items
 function arrayMove<T>(array: T[], from: number, to: number): T[] {
@@ -195,12 +196,35 @@ const TaskColumn: React.FC<TaskColumnProps> = ({ status, tasks, onAddTask, onEdi
 // Add contributors to props
 interface TasksBoardProps {
   contributors: Contributor[];
+  vscodeApi: { postMessage: (message: any) => void; };
+  repositoryName?: string;
+  repoOwner?: string; // Added to help construct repo full name
+  repoName?: string;  // Added to help construct repo full name
+  currentBranch?: string | null;
+  assignerLogin?: string | null; // Changed from assignerName to assignerLogin
+  currentUserName?: string | null; // To be used as assignerLogin
 }
 
-export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
+// Ensure all props are correctly destructured, especially assignerLogin
+export function TasksBoard({ 
+  contributors, 
+  vscodeApi, 
+  repositoryName, 
+  repoOwner, 
+  repoName, 
+  currentBranch, 
+  assignerLogin, // Changed from assignerName
+  currentUserName // Ensuring this is available if it was intended for assigner logic
+}: TasksBoardProps): JSX.Element {
+  const { toast } = useToast(); 
   const columnNames: TaskStatus[] = ['To Do', 'In Progress', 'Done'];
-  const [tasks, setTasks] = useState<Task[]>([]); // Initialize with an empty array
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  // Use propRepoOwner and propRepoName if provided, otherwise try to parse from repositoryName
+  const repoOwnerDerived = repoOwner || repositoryName?.split('/')[0];
+  const repoNameDerived = repoName || repositoryName?.split('/')[1];
   
   // State for adding tasks
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
@@ -211,6 +235,82 @@ export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
   const [newTaskSubtasks, setNewTaskSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [newTaskAttachments, setNewTaskAttachments] = useState<{ name: string; url: string }[]>([]);
+
+  // Effect for Loading Tasks
+  useEffect(() => {
+    if (repoOwnerDerived && repoNameDerived && vscodeApi) {
+      console.log(`[TasksBoard] Requesting tasks for ${repoOwnerDerived}/${repoNameDerived}`);
+      setInitialLoadComplete(false); 
+      vscodeApi.postMessage({
+        command: 'loadTasks',
+        data: { repoOwner: repoOwnerDerived, repoName: repoNameDerived },
+      });
+    } else {
+      setTasks([]);
+      setInitialLoadComplete(false);
+      // console.log('[TasksBoard] Missing repoOwner, repoName, or vscodeApi. Cannot load tasks.');
+    }
+  }, [repoOwnerDerived, repoNameDerived, vscodeApi]);
+
+  // Effect for Listening to Messages (tasksLoaded and tasksSaved)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data;
+      switch (message.command) {
+        case 'tasksLoaded':
+          if (message.error) {
+            console.error('[TasksBoard] Error loading tasks:', message.error);
+            toast({
+              title: "Error Loading Tasks",
+              description: message.error,
+              variant: "destructive",
+            });
+            setTasks([]); 
+          } else {
+            // console.log('[TasksBoard] Tasks loaded from extension:', message.tasks);
+            setTasks(message.tasks || []);
+          }
+          setInitialLoadComplete(true);
+          break;
+        case 'tasksSaved':
+          if (message.success) {
+            // console.log('[TasksBoard] Tasks saved successfully via extension.');
+            // Optionally show a success toast, but it might be too frequent.
+            // toast({ title: "Tasks Synced", description: "Your tasks have been saved.", variant: "success" });
+          } else {
+            console.error('[TasksBoard] Error saving tasks via extension:', message.error);
+            toast({
+              title: "Error Saving Tasks",
+              description: message.error,
+              variant: "destructive",
+            });
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [vscodeApi, toast]);
+
+  // Effect for Saving Tasks
+  // This effect now triggers whenever `tasks` state changes *after* the initial load for the current repo is complete.
+  useEffect(() => {
+    // Only save if initial load for the current repo context is complete and we have repo context.
+    if (initialLoadComplete && repoOwnerDerived && repoNameDerived && vscodeApi) {
+      // console.log(`[TasksBoard] Debouncing save for ${repoOwnerDerived}/${repoNameDerived}`);
+      const timer = setTimeout(() => {
+        console.log(`[TasksBoard] Attempting to save tasks for ${repoOwnerDerived}/${repoNameDerived}:`, tasks);
+        vscodeApi.postMessage({
+          command: 'saveTasks',
+          data: { repoOwner: repoOwnerDerived, repoName: repoNameDerived, tasks },
+        });
+      }, 1000); // Debounce save by 1 second
+      return () => clearTimeout(timer);
+    }
+  }, [tasks, initialLoadComplete, repoOwnerDerived, repoNameDerived, vscodeApi]);
 
   // State for editing tasks
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -266,6 +366,7 @@ export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
         login: selectedContributor.login,
         name: selectedContributor.name || selectedContributor.login,
         avatarUrl: selectedContributor.avatar_url,
+        email: selectedContributor.email || undefined
       };
     }
 
@@ -278,6 +379,9 @@ export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
       subtasks: newTaskSubtasks,
       dueDate: newTaskDueDate ? newTaskDueDate : undefined,
       attachments: newTaskAttachments.length > 0 ? newTaskAttachments : undefined,
+      // Add repository context if available and needed by the Task type
+      repository: (repoOwner && repoName) ? `${repoOwner}/${repoName}` : repositoryName || undefined,
+      branch: currentBranch || undefined,
     };
     
     setTasks(prevTasks => {
@@ -313,6 +417,25 @@ export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
         return finalOrderedTasks;
     });
 
+    if (assigneeForTask && vscodeApi) {
+      const resolvedAssignerName = assignerLogin || 'System'; // Use assignerLogin prop
+      vscodeApi.postMessage({
+        command: 'sendTaskNotification',
+        payload: {
+          assigneeName: assigneeForTask.name || assigneeForTask.login,
+          assigneeEmail: assigneeForTask.email,
+          taskTitle: newTask.title,
+          taskDescription: newTask.description || '',
+          dueDate: newTask.dueDate || '',
+          subtasks: newTask.subtasks || [],
+          attachments: newTask.attachments || [],
+          repositoryName: newTask.repository || '', // Use task's repo
+          branchName: newTask.branch || '', // Use task's branch
+          assignerName: resolvedAssignerName,
+          message: `You have been assigned a new task: \\\"${newTask.title}\\\"`,
+        }
+      });
+    }
     setNewTaskTitle('');
     setNewTaskDescription('');
     setNewTaskAssigneeId('');
@@ -353,25 +476,50 @@ export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
         login: selectedContributor.login,
         name: selectedContributor.name || selectedContributor.login,
         avatarUrl: selectedContributor.avatar_url,
+        email: selectedContributor.email || undefined
       };
     }
+
+    const updatedTaskData = { 
+      title: editedTaskTitle.trim(), 
+      description: editedTaskDescription.trim(), 
+      assignee: assigneeForTask, 
+      subtasks: editedTaskSubtasks, 
+      dueDate: editedTaskDueDate ? editedTaskDueDate : undefined, 
+      attachments: editedTaskAttachments.length > 0 ? editedTaskAttachments : undefined,
+      // Preserve or update repo/branch context if editing allows it
+      repository: editingTask.repository, // Assuming Task type has these
+      branch: editingTask.branch,
+    };
 
     setTasks(prevTasks => 
       prevTasks.map(task => 
         task.id === editingTask.id 
-          ? { 
-              ...task, 
-              title: editedTaskTitle.trim(), 
-              description: editedTaskDescription.trim(), 
-              assignee: assigneeForTask, 
-              subtasks: editedTaskSubtasks, 
-              dueDate: editedTaskDueDate ? editedTaskDueDate : undefined, 
-              attachments: editedTaskAttachments.length > 0 ? editedTaskAttachments : undefined,
-            } 
+          ? { ...task, ...updatedTaskData } 
           : task
       )
     );
     handleCloseEditTaskDialog();
+
+    if (editingTask && assigneeForTask && editingTask.assignee?.login !== assigneeForTask.login) {
+      const resolvedAssignerName = assignerLogin || 'System'; // Use assignerLogin prop
+      vscodeApi.postMessage({
+        command: 'sendTaskNotification',
+        payload: {
+          assigneeName: assigneeForTask.name || assigneeForTask.login, 
+          assigneeEmail: assigneeForTask.email, 
+          taskTitle: updatedTaskData.title,
+          taskDescription: updatedTaskData.description || '',
+          dueDate: updatedTaskData.dueDate || '',
+          subtasks: updatedTaskData.subtasks || [],
+          attachments: updatedTaskData.attachments || [],
+          repositoryName: updatedTaskData.repository || '',
+          branchName: updatedTaskData.branch || '',
+          assignerName: resolvedAssignerName,
+          message: `You have been assigned a new task: \\\"${updatedTaskData.title}\\\"`,
+        }
+      });
+    }
   };
 
   const handleOpenDeleteConfirmDialog = (task: Task) => {
@@ -466,6 +614,44 @@ export function TasksBoard({ contributors }: TasksBoardProps): JSX.Element {
         }
         return newTasks;
       }
+    });
+  };
+
+  const handleSendNotification = (task: Task, assignee: TaskAssignee) => {
+    if (!assignee.email) {
+      console.warn(`[TasksBoard] Assignee ${assignee.name} has no email. Cannot send notification.`);
+      toast({
+        title: "Cannot Send Notification",
+        description: `Assignee ${assignee.name} has no email address configured.`,
+        variant: "default", 
+      });
+      return;
+    }
+
+    const currentFullRepoName = (task.repository) ? task.repository : (repoOwner && repoName) ? `${repoOwner}/${repoName}` : '';
+    const repoLink = currentFullRepoName ? `https://github.com/${currentFullRepoName}` : '#';
+    
+    const resolvedAssignerName = assignerLogin || 'System'; // Use assignerLogin prop
+
+    const notificationPayload = {
+      command: 'sendTaskNotification',
+      taskDetails: {
+        assigneeName: assignee.name,
+        assigneeEmail: assignee.email,
+        taskTitle: task.title,
+        taskDescription: task.description || 'No description provided.',
+        dueDate: task.dueDate || 'Not set',
+        repositoryName: currentFullRepoName,
+        repositoryLink: repoLink,
+        assignerName: resolvedAssignerName, // Display name of the assigner
+        assignerProfileLink: assignerProfile, 
+      }
+    };
+    console.log('[TasksBoard] Sending task notification:', notificationPayload);
+    vscodeApi.postMessage(notificationPayload);
+    toast({
+      title: "Task Assigned",
+      description: `Notification sent to ${assignee.name} for task: ${task.title}.`,
     });
   };
 

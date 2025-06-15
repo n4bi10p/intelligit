@@ -2,6 +2,7 @@
   "name": "intelligit",
   "displayName": "IntelliGit",
   "description": "An intelligent assistant for Git and GitHub workflows.",
+  "publisher": "intelligit-dev",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.80.0"
@@ -10,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:intelligit.showPanel"
+    "onCommand:intelligit.showPanel",
+    "onUri"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -18,6 +20,12 @@
       {
         "command": "intelligit.showPanel",
         "title": "Show IntelliGit Panel"
+      }
+    ],
+    "uriHandler": [
+      {
+        "id": "intelligit.uriHandler",
+        "path": "/showAndFocusTask"
       }
     ]
   },
@@ -39,6 +47,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/vscode": "^1.54.0",
+    "@types/nodemailer": "^6.4.15",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vscode/test-cli": "^0.0.10",
@@ -49,6 +58,8 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "tailwindcss": "^4.1.8"
+    "nodemailer": "^6.9.14",
+    "dotenv": "^16.4.5",
+    "firebase-admin": "^12.1.0"
   }
 }

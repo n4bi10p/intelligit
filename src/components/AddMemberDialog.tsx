@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 type PermissionLevel = 'pull' | 'push' | 'admin' | 'maintain' | 'triage';
 
-interface AddMemberDialogProps {
+export interface AddMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddMember: (username: string, permission: PermissionLevel) => void;

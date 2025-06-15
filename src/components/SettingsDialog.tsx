@@ -51,6 +51,8 @@ interface SettingsDialogProps {
   isLoading: boolean; // For overall loading state after clicking connect
 }
 
+export type { SettingsDialogProps }; // Export the props interface
+
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   open,
   onOpenChange,

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Task Assigned</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            background-color: #121212; /* Overall page background */
+            -webkit-font-smoothing: antialiased;
+            color: #E0E0E0; /* Default text color */
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #2D2D2D; /* Main content card background - slightly lighter than image for sections */
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #444444; /* Adjusted border */
+        }
+        .header {
+            background: linear-gradient(90deg, #8A2BE2, #4B0082); /* Purple gradient */
+            padding: 25px 30px;
+            text-align: center;
+            color: #FFFFFF;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: bold;
+        }
+        .header p {
+            margin: 8px 0 0;
+            font-size: 15px;
+            opacity: 0.85;
+        }
+        .content {
+            padding: 25px 30px;
+            background-color: #1E1E1E; /* Darker background for the content area inside the container */
+        }
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #FFFFFF;
+            font-weight: 500;
+        }
+        .greeting-subtext {
+            font-size: 15px;
+            color: #BDBDBD;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        .section-card {
+            background-color: #252525; /* Background for individual sections like title, description etc. */
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #383838;
+        }
+        .task-title-section img { /* For the @ symbol or icon */
+            width: 24px; 
+            height: 24px;
+            margin-right: 12px;
+            vertical-align: middle;
+        }
+        .task-title-section h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #FFFFFF;
+            font-weight: 600;
+            display: inline;
+            vertical-align: middle;
+        }
+        .detail-section h3 {
+            font-size: 12px; /* Smaller label for DESCRIPTION, DUE DATE etc. */
+            color: #888888; 
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        .detail-section p, .detail-section ul {
+            font-size: 15px;
+            color: #BDBDBD;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            white-space: pre-wrap; 
+        }
+        .detail-section ul {
+            list-style-type: none; 
+            padding-left: 5px;
+        }
+        .detail-section li {
+            margin-bottom: 6px;
+        }
+        .due-date-value {
+            background-color: #4A4A28; /* Darker yellow background */
+            color: #FFDB58; /* Brighter yellow text */
+            padding: 4px 8px;
+            border-radius: 5px;
+            display: inline-block;
+            font-weight: 500;
+            border: 1px solid #6B5B2C;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr; /* Ensure three equal columns */
+            gap: 15px; 
+            margin-top: 20px; /* Added some margin-top for better separation */
+            padding-top: 20px; /* Keep padding if it's for internal spacing from a border */
+            border-top: 1px solid #333333; /* Keep border if needed */
+        }
+        .metadata-item {
+            background-color: #252525;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border: 1px solid #383838;
+        }
+        .metadata-item .label {
+            font-size: 11px; /* Smaller label */
+            color: #888888;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+            display: block; /* Ensure label is on its own line */
+        }
+        .metadata-item .value {
+            font-size: 14px; /* Slightly smaller value text */
+            color: #FFFFFF;
+            font-weight: 500;
+        }
+        .button-container {
+            text-align: center;
+            margin-top: 30px; /* Space above the button */
+            margin-bottom: 15px; /* Space below the button */
+        }
+        .button {
+            background-color: #764abc; /* IntelliGit Purple */
+            color: #FFFFFF;
+            padding: 12px 25px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 15px;
+            display: inline-block;
+            border: none;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #653a9c; /* Darker purple on hover */
+        }
+        .footer {
+            text-align: center;
+            padding: 25px 30px;
+            font-size: 12px;
+            color: #666666;
+            border-top: 1px solid #333333;
+            margin-top: 10px;
+        }
+        .subtask-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 0;
+        }
+        .subtask-item .checkbox-icon { /* For the checkmark icon */
+            width: 16px;
+            height: 16px;
+            margin-right: 10px;
+            color: #76E094; /* Green checkmark */
+            font-weight: bold;
+        }
+         .subtask-item .checkbox-icon-empty { /* For empty box if needed */
+            width: 14px;
+            height: 14px;
+            margin-right: 10px;
+            border: 1.5px solid #555;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .subtask-item span {
+             vertical-align: middle;
+        }
+        .subtask-item.completed span {
+            text-decoration: line-through;
+            color: #777;
+        }
+        .attachment-item a {
+            color: #58A6FF; /* Blue link for attachments */
+            text-decoration: none;
+        }
+        .attachment-item a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✨ New Task Assigned ✨</h1>
+            <p>A new task has been added to your To-Do list.</p>
+        </div>
+        <div class="content">
+            <div class="greeting">
+                👋 Hello, [AssigneeName]!
+            </div>
+            <p class="greeting-subtext">You have been assigned a new task. Please review the details below.</p>
+
+            <div class="section-card task-title-section">
+                <!-- Using a placeholder for the @ symbol, replace with an actual <img> if you have a URL -->
+                <span style="font-size: 20px; margin-right: 10px; color: #BBBBBB;">🎯</span> 
+                <h2>[TaskTitle]</h2>
+            </div>
+
+            <div class="section-card detail-section">
+                <h3>📝 DESCRIPTION</h3>
+                <p>[TaskDescription]</p>
+            </div>
+
+            <div class="section-card detail-section">
+                <h3>🗓️ DUE DATE</h3>
+                <p><span class="due-date-value">[DueDate]</span></p>
+            </div>
+
+            <div class="section-card detail-section">
+                <h3>✅ SUBTASKS</h3>
+                [SubtasksHTML]
+
+            </div>
+
+            <div class="section-card detail-section">
+                <h3>📎 ATTACHMENTS</h3>
+                [AttachmentsHTML]
+
+            </div>
+
+            <div class="metadata-grid">
+                <div class="metadata-item">
+                    <span class="label">📁 REPOSITORY</span>
+                    <span class="value">[RepositoryName]</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="label">🌿 BRANCH</span>
+                    <span class="value">[BranchName]</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="label">👤 ASSIGNED BY</span>
+                    <span class="value">[AssignerName]</span>
+                </div>
+            </div>
+
+            <div class="button-container">
+                <a href="[ViewTaskInAppLink]" class="button">👉 View Task in App</a>
+            </div>
+        </div>
+        <div class="footer">
+            &copy; [CurrentYear] IntelliGit. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>
