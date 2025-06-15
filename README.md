@@ -238,4 +238,4 @@ Contributions are welcome! Please follow standard coding practices, and ensure t
 
 ---
 
-This README provides a comprehensive guide. Remember to replace placeholder values (like `<repository-url>`, Firebase configs, SMTP details) with your actual project information.
+This README provides a comprehensive guide. Remember to replace placeholder values (like Api keys, Firebase configs, SMTP details) with your actual project information.
