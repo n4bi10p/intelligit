@@ -228,14 +228,6 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
     *   The extension saves task data to Firebase.
     *   The extension loads tasks from Firebase when the webview is initialized.
 
-## Contributing
-
-Contributions are welcome! Please follow standard coding practices, and ensure tests pass before submitting a pull request. (Further details can be added here, like branching strategy, code style, etc.)
-
-## License
-
-(Specify your license here, e.g., MIT License)
-
 ---
 
 This README provides a comprehensive guide. Remember to replace placeholder values (like Api keys, Firebase configs, SMTP details) with your actual project information.
