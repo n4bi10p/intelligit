@@ -28,13 +28,14 @@ import {
   useSensors,
   closestCorners,
   DragEndEvent,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { CSS as DndKitCSS } from '@dnd-kit/utilities';
 import {
   Select,
   SelectContent,
@@ -83,7 +84,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({ task, isOverlay =
   const statusClass = statusColors[task.status] || 'border-transparent';
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: transform ? DndKitCSS.toString(transform) : undefined,
     transition,
     opacity: isDragging && !isOverlay ? 0.5 : 1,
     cursor: isOverlay ? 'grabbing' : 'grab',
@@ -168,19 +169,32 @@ interface TaskColumnProps {
   onViewTask?: (task: Task) => void;
 }
 
+const columnNames: TaskStatus[] = ['To Do', 'In Progress', 'Done'];
+const columnBorderColors: Record<TaskStatus, string> = {
+  'To Do': 'border-red-500',
+  'In Progress': 'border-yellow-500',
+  'Done': 'border-green-500',
+};
+
 const TaskColumn: React.FC<TaskColumnProps> = ({ status, tasks, onAddTask, onEditTask, onDeleteTask, onViewTask }) => {
+  const { setNodeRef } = useDroppable({ id: status });
+  const borderColor = columnBorderColors[status] || 'border-border';
   return (
-    <div className="flex-1 min-w-[280px] bg-card p-3 rounded-lg shadow h-full flex flex-col">
-      <div className="flex justify-between items-center mb-3 px-1">
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col flex-1 min-w-0 bg-card rounded-lg shadow h-full border-2 ${borderColor} mx-2`}
+      style={{ minWidth: 0 }}
+    >
+      <div className="flex justify-between items-center mb-3 px-4 pt-4">
         <h3 className="text-base font-semibold text-foreground">{status}</h3>
         {status === 'To Do' && onAddTask && (
-            <Button variant="ghost" size="sm" onClick={() => onAddTask(status)} className="text-muted-foreground hover:text-foreground">
-              <PlusCircle className="h-4 w-4 mr-1" />
-              New
-            </Button>
+          <Button variant="ghost" size="sm" onClick={() => onAddTask(status)} className="text-muted-foreground hover:text-foreground">
+            <PlusCircle className="h-4 w-4 mr-1" />
+            New
+          </Button>
         )}
       </div>
-      <ScrollArea className="flex-grow pr-2">
+      <ScrollArea className="flex-grow px-2 pb-4">
         <SortableContext id={status} items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2 min-h-[50px]">
             {tasks.map(task => (
@@ -557,60 +571,64 @@ export function TasksBoard({
     const activeId = active.id.toString();
     const overId = over.id.toString();
 
-    if (activeId === overId && !columnNames.includes(overId as TaskStatus)) return; // Dropped on itself (and not on a column)
-
     setTasks(prevTasks => {
       const activeTaskIndex = prevTasks.findIndex(t => t.id === activeId);
       if (activeTaskIndex === -1) return prevTasks;
-
       const activeTask = prevTasks[activeTaskIndex];
 
-      // Determine target column status
-      let targetStatus: TaskStatus | undefined;
-      const overIsAColumn = columnNames.includes(overId as TaskStatus);
-      const overIsATask = prevTasks.some(t => t.id === overId);
-      const overContainerId = over.data.current?.sortable?.containerId as TaskStatus | undefined;
+      // If dropped on a column, update status and move to top of that column
+      if (["To Do", "In Progress", "Done"].includes(overId)) {
+        if (activeTask.status !== overId) {
+          // Remove from old position
+          let filtered = prevTasks.filter(t => t.id !== activeId);
+          // Insert at top of new column
+          const insertIndex = filtered.findIndex(t => t.status === overId);
+          const newTask = { ...activeTask, status: overId as TaskStatus };
+          if (insertIndex === -1) {
+            // No tasks in that column yet, append to end
+            return [...filtered, newTask];
+          } else {
+            // Insert at the top of the new column
+            return [
+              ...filtered.slice(0, insertIndex),
+              newTask,
+              ...filtered.slice(insertIndex)
+            ];
+          }
+        }
+        return prevTasks;
+      }
 
-      if (overIsAColumn) {
-        targetStatus = overId as TaskStatus;
-      } else if (overIsATask) {
+      // If dropped on another task, keep your previous logic
+      let targetStatus: TaskStatus | undefined;
+      const overIsATask = prevTasks.some(t => t.id === overId);
+      if (overIsATask) {
         const overTaskIndex = prevTasks.findIndex(t => t.id === overId);
         if (overTaskIndex !== -1) {
           targetStatus = prevTasks[overTaskIndex].status;
         }
-      } else if (overContainerId && columnNames.includes(overContainerId)) {
-        targetStatus = overContainerId;
       }
-
-      if (!targetStatus) return prevTasks; // Could not determine target status
-
-      // Case 1: Reordering within the same column
+      if (!targetStatus) return prevTasks;
       if (targetStatus === activeTask.status) {
-        if (overIsATask && activeId !== overId) { // Ensure dropping on a different task within the same column
+        if (overIsATask && activeId !== overId) {
           const overTaskIndex = prevTasks.findIndex(t => t.id === overId);
           if (overTaskIndex !== -1) {
             return arrayMove(prevTasks, activeTaskIndex, overTaskIndex);
           }
         }
-        // If dropped on the column itself (not a specific task) or on itself, no reorder action.
         return prevTasks;
-      }
-      // Case 2: Moving to a different column
-      else {
+      } else {
         let newTasks = prevTasks.map(task =>
           task.id === activeId ? { ...task, status: targetStatus! } : task
         );
-        // If dropped onto a specific task in the new column, try to place it there
         if (overIsATask) {
-            const currentActiveTaskIndex = newTasks.findIndex(t => t.id === activeId);
-            const targetOverTaskIndex = newTasks.findIndex(t => t.id === overId);
-            if (currentActiveTaskIndex !== -1 && targetOverTaskIndex !== -1) {
-                 // Temporarily remove, then insert. This ensures it's part of the array for arrayMove.
-                const [movedTask] = newTasks.splice(currentActiveTaskIndex, 1);
-                // Adjust target index if current was before target
-                const adjustedTargetIndex = currentActiveTaskIndex < targetOverTaskIndex ? targetOverTaskIndex -1 : targetOverTaskIndex;
-                newTasks.splice(adjustedTargetIndex, 0, movedTask);
-            }
+          const currentActiveTaskIndex = newTasks.findIndex(t => t.id === activeId);
+          const targetOverTaskIndex = newTasks.findIndex(t => t.id === overId);
+          if (currentActiveTaskIndex !== -1 && targetOverTaskIndex !== -1) {
+            const [movedTask] = newTasks.splice(currentActiveTaskIndex, 1);
+            const adjustedTargetIndex = currentActiveTaskIndex < targetOverTaskIndex ? targetOverTaskIndex - 1 : targetOverTaskIndex;
+            newTasks.splice(adjustedTargetIndex, 0, movedTask);
+          }
         }
         return newTasks;
       }
@@ -662,22 +680,21 @@ export function TasksBoard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* The header containing the SettingsIcon button has been removed. */}
-      {/* Main content area for columns directly under DndContext or a simplified wrapper */}
-      <div className="p-4 flex space-x-4 flex-grow overflow-x-auto h-full">
-        {columnNames.map(status => (
-          <TaskColumn
-            key={status}
-            status={status}
-            tasks={tasks.filter(task => task.status === status)}
-            onAddTask={status === 'To Do' ? handleOpenAddTaskDialog : undefined}
-            onEditTask={handleOpenEditTaskDialog}
-            onDeleteTask={handleOpenDeleteConfirmDialog}
-            onViewTask={handleOpenViewTaskDialog} 
-          />
-        ))}
-      </div>
-
+      <SortableContext id="columns" items={columnNames} strategy={verticalListSortingStrategy}>
+        <div className="p-4 flex flex-row gap-6 h-full min-h-[500px]" style={{ alignItems: 'stretch' }}>
+          {columnNames.map((status, idx) => (
+            <TaskColumn
+              key={status}
+              status={status}
+              tasks={tasks.filter(task => task.status === status)}
+              onAddTask={status === 'To Do' ? handleOpenAddTaskDialog : undefined}
+              onEditTask={handleOpenEditTaskDialog}
+              onDeleteTask={handleOpenDeleteConfirmDialog}
+              onViewTask={handleOpenViewTaskDialog}
+            />
+          ))}
+        </div>
+      </SortableContext>
       <DragOverlay>
         {/* For the overlay, edit/delete don't make sense, so pass empty functions or disable buttons if preferred */}
         {activeTask ? <DraggableTaskCard task={activeTask} isOverlay onEditTask={() => {}} onDeleteTask={() => {}} /> : null}
