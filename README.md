@@ -74,12 +74,12 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
 
 1.  **Clone the Repository**:
     ```bash
-    git clone <repository-url>
-    cd gitagent-pr
+    git clone https://github.com/n4bi10p/intelligit
+    cd intelligit
     ```
 
 2.  **Web Application (Root Directory)**:
-    *   Navigate to the project root directory (`gitagent-pr/`).
+    *   You should now be in the project root directory (`intelligit/`).
     *   **Install Dependencies**:
         ```bash
         npm install
@@ -90,7 +90,7 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
         1.  Create a Firebase project in the [Firebase Console](https://console.firebase.google.com/).
         2.  Add a Web App to your Firebase project.
         3.  Copy the Firebase configuration object (apiKey, authDomain, projectId, etc.).
-        4.  Create a `.env.local` file in the root directory (`gitagent-pr/.env.local`).
+        4.  Create a `.env.local` file in the root directory (`intelligit/.env.local`).
         5.  Add your Firebase client configuration to `.env.local` using `NEXT_PUBLIC_` prefixes:
             ```env
             NEXT_PUBLIC_FIREBASE_API_KEY="your-api-key"
@@ -102,8 +102,8 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
             ```
         6.  Ensure `src/firebase/firebase.ts` is correctly using these environment variables.
 
-3.  **VS Code Extension (`intelligit/` Directory)**:
-    *   Navigate to the extension directory:
+3.  **VS Code Extension (`intelligit/intelligit/` Directory)**:
+    *   Navigate to the extension directory from the project root:
         ```bash
         cd intelligit
         ```
@@ -116,10 +116,10 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
     *   **Firebase Admin SDK Setup**:
         1.  In the Firebase Console, go to "Project settings" > "Service accounts".
         2.  Generate a new private key and download the JSON file.
-        3.  Place this JSON file in the `intelligit/config/` directory. You can name it `firebaseServiceAccountKey.json` or update the path in your extension's code/environment variables.
-            **Important**: Ensure this file is NOT committed to Git if it contains sensitive credentials. Add `intelligit/config/firebaseServiceAccountKey.json` to your `.gitignore` file if it's not already there.
+        3.  Place this JSON file in the `intelligit/intelligit/config/` directory (i.e., `config/` within the extension's own folder).
+            **Important**: Ensure this file is NOT committed to Git if it contains sensitive credentials. Add `intelligit/config/firebaseServiceAccountKey.json` to your `.gitignore` file in the extension's directory if it's not already there.
     *   **Environment Variables for Extension**:
-        1.  Create a `.env` file in the `intelligit/` directory (`intelligit/.env`).
+        1.  Create a `.env` file in the `intelligit/intelligit/` directory (i.e., `intelligit/.env`).
         2.  Add the following environment variables, replacing placeholder values with your actual credentials:
             ```env
             # SMTP Configuration for Email Notifications
@@ -130,18 +130,14 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
             SMTP_FROM_EMAIL="notifications@example.com" # Email address to send from
 
             # Firebase Admin SDK Configuration
-            # Option 1: If using a direct path in .env (ensure extension code reads this)
             FIREBASE_SERVICE_ACCOUNT_PATH="./config/firebaseServiceAccountKey.json" 
-            # Option 2: If the extension code constructs the path or expects it in a specific location relative to dist/extension.js,
-            # ensure firebaseServiceAccountKey.json is copied to the dist/config folder during the build process if needed.
-            # The current setup in extension.ts seems to use a path relative to the extension's runtime location.
             ```
-        3.  Ensure `intelligit/.env` is listed in `intelligit/.gitignore`.
+        3.  Ensure `intelligit/intelligit/.env` is listed in the `.gitignore` file located in the `intelligit/intelligit/` directory.
 
 ## Running the Application
 
 1.  **Web Application (for UI development/testing outside VS Code, if applicable)**:
-    *   From the root directory (`gitagent-pr/`):
+    *   From the root directory (`intelligit/`):
         ```bash
         npm run dev
         # or
@@ -150,19 +146,18 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
     *   Open your browser to `http://localhost:3000` (or the port specified).
 
 2.  **VS Code Extension (Primary Mode of Operation)**:
-    *   Open the `gitagent-pr/` (root) folder OR `gitagent-pr/intelligit/` folder as the workspace in VS Code.
-        *   If opening the root, ensure your launch configuration targets the extension.
-        *   If opening `intelligit/`, this is more straightforward for extension development.
+    *   Open the project root folder (`intelligit/`) in VS Code.
     *   **Launch the Extension**:
         *   Press `F5` or go to "Run" > "Start Debugging". This will open a new VS Code window (Extension Development Host) with the `intelligit` extension running.
+        (Ensure your VS Code launch configuration in `.vscode/launch.json` at the project root correctly points to the extension if you have multiple launch configs).
     *   **Accessing the Task Board**:
         *   Open the command palette (`Ctrl+Shift+P` or `Cmd+Shift+P`).
-        *   Run the command that activates the webview (e.g., "IntelliGit: Show Tasks Board" - check `intelligit/package.json` for the exact command title).
+        *   Run the command that activates the webview (e.g., "IntelliGit: Show Tasks Board" - check `intelligit/intelligit/package.json` for the exact command title).
 
 ## Building for Production
 
 1.  **Web Application**:
-    *   From the root directory (`gitagent-pr/`):
+    *   From the root directory (`intelligit/`):
         ```bash
         npm run build
         # or
@@ -171,7 +166,7 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
     *   This will create an optimized build in the `.next/` folder.
 
 2.  **VS Code Extension**:
-    *   Navigate to the `intelligit/` directory:
+    *   Navigate to the extension's directory (`intelligit/intelligit/`):
         ```bash
         cd intelligit
         ```
@@ -182,7 +177,7 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
         ```
     *   **Package the Extension (Optional, for distribution)**:
         *   Install `vsce` globally if you haven't already: `npm install -g @vscode/vsce`
-        *   Run packaging command:
+        *   Run packaging command (from within `intelligit/intelligit/`):
             ```bash
             vsce package
             ```
@@ -191,7 +186,7 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
 ## Testing
 
 1.  **Web Application (Vitest)**:
-    *   From the root directory (`gitagent-pr/`):
+    *   From the root directory (`intelligit/`):
         ```bash
         npm test
         # or
@@ -200,13 +195,15 @@ IntelliGit is a comprehensive solution designed to enhance developer productivit
     *   This will run tests defined in files like `src/components/__tests__/code-chat.test.tsx` using Vitest.
 
 2.  **VS Code Extension**:
-    *   Navigate to the `intelligit/` directory.
-    *   The `package.json` includes a test script: `"test": "vscode-test"`.
-    *   To run tests (e.g., `intelligit/src/test/extension.test.ts`):
+    *   Navigate to the extension's directory (`intelligit/intelligit/`):
+        ```bash
+        cd intelligit
+        ```
+    *   The `package.json` in this directory includes a test script: `"test": "vscode-test"`.
+    *   To run tests (e.g., `intelligit/intelligit/src/test/extension.test.ts`):
         *   You might need to configure a test runner or launch configuration in VS Code specifically for extension tests.
-        *   Typically, you can run `npm test` from the `intelligit/` directory:
+        *   Typically, you can run `npm test` from the `intelligit/intelligit/` directory:
             ```bash
-            cd intelligit
             npm test
             ```
         *   Alternatively, VS Code's Test Explorer UI might pick up and run these tests if correctly configured.
