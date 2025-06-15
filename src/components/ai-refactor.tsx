@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -12,10 +11,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { collaborativeRefactor, type CollaborativeRefactorInput, type CollaborativeRefactorOutput } from '@/ai/flows/collaborative-refactoring';
 import { Loader2 } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast";
 
+// Types
+import { type CollaborativeRefactorOutput } from '@/ai/flows/collaborative-refactoring';
+
+// Form schema
 const refactorSchema = z.object({
   codeSnippet: z.string().min(10, "Code snippet must be at least 10 characters."),
   originalAuthor: z.string().min(1, "Original author is required."),
@@ -43,34 +45,49 @@ export function AiRefactor() {
     },
   });
 
-  const onSubmit = async (data: RefactorFormData) => {
-    setIsLoading(true);
-    setResult(null);
-    setError(null);
+const onSubmit = async (data: RefactorFormData) => {
+  setIsLoading(true);
+  setResult(null);
+  setError(null);
 
-    try {
-      const input: CollaborativeRefactorInput = {
-        ...data,
-        currentCollaborators: data.currentCollaborators.split(',').map(s => s.trim()).filter(s => s.length > 0),
-      };
-      const response = await collaborativeRefactor(input);
-      setResult(response);
-      toast({
-        title: "Suggestion Generated",
-        description: "AI refactoring suggestion has been successfully generated.",
-      });
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-      setError(errorMessage);
-      toast({
-        title: "Error Generating Suggestion",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  try {
+    const response = await fetch("/api/refactor", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        provider: "gemini",
+        author: data.originalAuthor,
+        complexity: data.codeComplexity,
+        collaborators: data.currentCollaborators,
+        goal: data.refactoringGoal,
+        code: data.codeSnippet,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch suggestion");
+
+    const resultData: CollaborativeRefactorOutput = await response.json();
+
+    setResult({ ...resultData, aiProviderName: "gemini" });
+
+    toast({
+      title: `Suggestion Generated`,
+      description: "AI refactoring suggestion successfully generated.",
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error occurred.";
+    setError(message);
+    toast({
+      title: "Error Generating Suggestion",
+      description: message,
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <ScrollArea className="h-full p-4">
@@ -81,6 +98,7 @@ export function AiRefactor() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+
               <div>
                 <Label htmlFor="codeSnippet" className="text-sm font-medium text-foreground">Code Snippet</Label>
                 <Controller
@@ -109,25 +127,25 @@ export function AiRefactor() {
                 />
                 {errors.originalAuthor && <p className="text-xs text-destructive mt-1">{errors.originalAuthor.message}</p>}
               </div>
-              
+
               <div>
                 <Label htmlFor="codeComplexity" className="text-sm font-medium text-foreground">Code Complexity</Label>
-                 <Controller
-                    name="codeComplexity"
-                    control={control}
-                    render={({ field }) => (
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger id="codeComplexity" className="mt-1 w-full bg-[hsl(var(--input))] text-foreground focus:ring-primary">
-                          <SelectValue placeholder="Select complexity" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover text-popover-foreground">
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
+                <Controller
+                  name="codeComplexity"
+                  control={control}
+                  render={({ field }) => (
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <SelectTrigger id="codeComplexity" className="mt-1 w-full bg-[hsl(var(--input))] text-foreground focus:ring-primary">
+                        <SelectValue placeholder="Select complexity" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover text-popover-foreground">
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 {errors.codeComplexity && <p className="text-xs text-destructive mt-1">{errors.codeComplexity.message}</p>}
               </div>
 
@@ -145,7 +163,7 @@ export function AiRefactor() {
 
               <div>
                 <Label htmlFor="refactoringGoal" className="text-sm font-medium text-foreground">Refactoring Goal</Label>
-                 <Controller
+                <Controller
                   name="refactoringGoal"
                   control={control}
                   render={({ field }) => (
@@ -164,12 +182,8 @@ export function AiRefactor() {
 
         {error && (
           <Card className="bg-destructive border-destructive text-destructive-foreground">
-            <CardHeader>
-              <CardTitle className="text-base">Error</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm">{error}</p>
-            </CardContent>
+            <CardHeader><CardTitle className="text-base">Error</CardTitle></CardHeader>
+            <CardContent><p className="text-sm">{error}</p></CardContent>
           </Card>
         )}
 
@@ -177,7 +191,7 @@ export function AiRefactor() {
           <div className="space-y-4">
             <Card className="bg-card border-border">
               <CardHeader>
-                <CardTitle className="text-base font-semibold text-primary">Suggestion</CardTitle>
+                <CardTitle className="text-base font-semibold text-primary">Suggestion from Gemini</CardTitle>
               </CardHeader>
               <CardContent>
                 <pre className="bg-[hsl(var(--background))] p-3 rounded-md text-sm text-foreground overflow-x-auto font-code">
@@ -207,3 +221,4 @@ export function AiRefactor() {
     </ScrollArea>
   );
 }
+

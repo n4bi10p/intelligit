@@ -22,11 +22,13 @@ const CollaborativeRefactorInputSchema = z.object({
 });
 export type CollaborativeRefactorInput = z.infer<typeof CollaborativeRefactorInputSchema>;
 
-const CollaborativeRefactorOutputSchema = z.object({
-  suggestion: z.string().describe('The AI-driven suggestion for refactoring the code snippet.'),
-  rationale: z.string().describe('The rationale behind the refactoring suggestion, considering collaboration dynamics.'),
-  priorityDeveloper: z.string().describe('The developer who should be consulted first based on their expertise or prior involvement.'),
+export const CollaborativeRefactorOutputSchema = z.object({
+  suggestion: z.string(),
+  rationale: z.string(),
+  priorityDeveloper: z.string(),
+  aiProviderName: z.string(), // Add aiProviderName here
 });
+
 export type CollaborativeRefactorOutput = z.infer<typeof CollaborativeRefactorOutputSchema>;
 
 export async function collaborativeRefactor(input: CollaborativeRefactorInput): Promise<CollaborativeRefactorOutput> {
@@ -52,6 +54,7 @@ Refactoring Goal: {{{refactoringGoal}}}
 
 Suggestion:`, // The suggestion will be populated by the model.
 });
+
 
 const collaborativeRefactorFlow = ai.defineFlow(
   {
