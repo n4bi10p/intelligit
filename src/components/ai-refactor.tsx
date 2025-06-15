@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import { SettingsDialog } from './SettingsDialog';
 
 // Types
 import { type CollaborativeRefactorOutput } from '@/ai/flows/collaborative-refactoring';
@@ -42,6 +43,19 @@ export function AiRefactor() {
   const [autoPush, setAutoPush] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingCommit, setPendingCommit] = useState<null | string>(null);
+  const [showPrPanel, setShowPrPanel] = useState(false);
+  const [prTitle, setPrTitle] = useState('');
+  const [prBody, setPrBody] = useState('');
+  const [isPrBodyLoading, setIsPrBodyLoading] = useState(false);
+  const [prError, setPrError] = useState<string | null>(null);
+  const [isCreatingPr, setIsCreatingPr] = useState(false);
+  const [prSuccess, setPrSuccess] = useState<string | null>(null);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [githubToken, setGithubToken] = useState<string>(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('githubToken') || '' : ''
+  );
+  const [tokenStatus, setTokenStatus] = useState<string>('');
   const { toast } = useToast();
 
   const { control, handleSubmit, formState: { errors } } = useForm<RefactorFormData>({
@@ -153,26 +167,125 @@ export function AiRefactor() {
     }
   };
 
+  // --- Repo Path Selection ---
+  const [repoPath, setRepoPath] = useState<string>("");
+
+  // Helper: Suggest default repo path for user
+  React.useEffect(() => {
+    // Suggest a default path if not set
+    if (!repoPath) {
+      setRepoPath("C:\\Users\\snabi\\Downloads\\Compressed\\telegram-chatbot"); // Example path, replace with your own
+    }
+  }, []);
+
   // Hardcoded repo path for local testing. Replace with dynamic value in production/extension.
-  const [repoPath, setRepoPath] = useState<string>("C:\\Users\\snabi\\Downloads\\Compressed\\aichatbot");
+  // const [repoPath, setRepoPath] = useState<string>("C:\\Users\\snabi\\Downloads\\Compressed\\aichatbot");
+
+  // --- PR Body Generation ---
+  const handleGeneratePrBody = async () => {
+    setIsPrBodyLoading(true);
+    setPrError(null);
+    try {
+      const response = await fetch('/api/commit-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diff: commitDiff }),
+      });
+      if (!response.ok) throw new Error('Failed to generate PR body');
+      const data = await response.json();
+      setPrBody(data.summary || '');
+    } catch (e) {
+      setPrError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsPrBodyLoading(false);
+    }
+  };
+
+  // Save token to localStorage
+  const handleSaveToken = (token: string) => {
+    setGithubToken(token);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('githubToken', token);
+    }
+    setTokenStatus('Token saved!');
+    setTimeout(() => setTokenStatus(''), 2000);
+  };
+
+  // Always get the latest token from localStorage before PR creation
+  const getLatestGithubToken = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('githubToken') || '';
+    }
+    return githubToken;
+  };
+
+  // --- PR Submission ---
+  const handleCreatePr = async () => {
+    setIsCreatingPr(true);
+    setPrError(null);
+    setPrSuccess(null);
+    setPrUrl(null);
+    const latestToken = getLatestGithubToken();
+    try {
+      // Debug: Log the token being sent
+      console.log('[AI] Creating PR with githubToken:', latestToken);
+      const response = await fetch('/api/pull-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoPath,
+          title: prTitle,
+          body: prBody,
+          githubToken: latestToken,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to create PR');
+      setPrSuccess('Pull request created successfully!');
+      setPrUrl(data.url || null);
+      toast({ title: '✅ Pull request created', description: data.url ? `View PR: ${data.url}` : 'Success' });
+    } catch (e) {
+      setPrError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsCreatingPr(false);
+    }
+  };
 
   return (
     <ScrollArea className="h-full p-4">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* --- Mode Selector --- */}
+        {/* --- Header with Settings --- */}
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xl font-bold text-foreground">AI Assistant</h2>
-          <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary')}>
-            <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODES.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2 items-center">
+            <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary')}>
+              <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODES.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+        {/* --- Settings Dialog --- */}
+        <SettingsDialog
+          open={showSettings}
+          onOpenChange={setShowSettings}
+          githubToken={githubToken}
+          onSaveToken={handleSaveToken || (() => {})}
+          tokenStatus={tokenStatus}
+          repoInput={''} // TODO: Wire up real repo selection
+          setRepoInput={() => {}}
+          onConnect={() => {}}
+          userRepositories={[]}
+          isFetchingUserRepos={false}
+          onRepoSelect={() => {}}
+          error={null}
+          isLoading={false}
+        />
         {/* --- Refactor Code Mode --- */}
         {mode === 'refactor' && (
           <Card className="bg-card border-border">
@@ -379,6 +492,12 @@ export function AiRefactor() {
                                 }
                                 toast({ title: '✅ Commit successful', description: plainMsg + pushMsg });
                                 setShowConfirmDialog(false);
+                                setPrTitle(plainMsg.split('\n')[0] || '');
+                                setPrBody('');
+                                setShowPrPanel(true);
+                                setPrError(null);
+                                setPrSuccess(null);
+                                setPrUrl(null);
                               } else {
                                 toast({ title: 'Commit failed', description: data.error || 'Unknown error', variant: 'destructive' });
                               }
@@ -396,6 +515,53 @@ export function AiRefactor() {
                   </Dialog>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+        {/* --- PR Panel --- */}
+        {showPrPanel && (
+          <Card className="bg-card border-border mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-primary">Generate Pull Request</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-2">
+                <Label className="text-sm font-medium text-foreground">PR Title</Label>
+                <Input
+                  value={prTitle}
+                  onChange={e => setPrTitle(e.target.value)}
+                  className="mt-1 bg-[hsl(var(--input))] text-foreground"
+                />
+              </div>
+              <div className="mb-2">
+                <Label className="text-sm font-medium text-foreground">PR Body</Label>
+                <Textarea
+                  value={prBody}
+                  onChange={e => setPrBody(e.target.value)}
+                  placeholder="Describe your changes..."
+                  className="mt-1 min-h-[100px] bg-[hsl(var(--input))] text-foreground"
+                />
+                <Button
+                  type="button"
+                  className="mt-2"
+                  onClick={handleGeneratePrBody}
+                  disabled={isPrBodyLoading}
+                >{isPrBodyLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Generate PR Body with Gemini'}</Button>
+              </div>
+              {prError && <p className="text-xs text-destructive mt-1">{prError}</p>}
+              {prSuccess && <p className="text-xs text-green-600 mt-1">{prSuccess} {prUrl && (<a href={prUrl} target="_blank" rel="noopener noreferrer" className="underline ml-2">View PR</a>)}</p>}
+              <Button
+                type="button"
+                className="w-full mt-4"
+                onClick={handleCreatePr}
+                disabled={isCreatingPr || !prTitle.trim() || !prBody.trim()}
+              >{isCreatingPr ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Pull Request'}</Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full mt-2"
+                onClick={() => setShowPrPanel(false)}
+              >Cancel</Button>
             </CardContent>
           </Card>
         )}

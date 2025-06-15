@@ -917,6 +917,9 @@ export default function CodeCollabAIPage() {
     },
     error: errorMessage, 
     isLoading: isLoading || isFetchingUserRepos,
+    githubToken: githubToken || '',
+    onSaveToken: () => {}, // <-- Fix: always provide a function
+    tokenStatus: '',
   };
 
   // Placeholder for LoginDialog state and handlers

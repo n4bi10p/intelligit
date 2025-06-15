@@ -26,6 +26,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover" // For searchable select
 import { Check, ChevronsUpDown } from "lucide-react" // For searchable select icons
+import { Input } from "@/components/ui/input";
 
 import { cn } from "@/lib/utils"; // For cn utility
 
@@ -41,14 +42,17 @@ interface RepositoryInfo {
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  githubToken: string;
+  onSaveToken: (token: string) => void;
+  tokenStatus: string;
   repoInput: string;
   setRepoInput: (value: string) => void;
   onConnect: () => void;
   userRepositories: RepositoryInfo[];
   isFetchingUserRepos: boolean;
   onRepoSelect: (selectedRepoFullName: string) => void;
-  error: string | null; // For displaying connection errors
-  isLoading: boolean; // For overall loading state after clicking connect
+  error: string | null;
+  isLoading: boolean;
 }
 
 export type { SettingsDialogProps }; // Export the props interface
@@ -56,31 +60,64 @@ export type { SettingsDialogProps }; // Export the props interface
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   open,
   onOpenChange,
-  repoInput, // This will now be primarily controlled by the Combobox selection
-  setRepoInput, // This will be called by the Combobox
+  githubToken,
+  onSaveToken,
+  tokenStatus,
+  repoInput,
+  setRepoInput,
   onConnect,
   userRepositories,
   isFetchingUserRepos,
-  onRepoSelect, // This might be redundant if setRepoInput handles the selection directly
+  onRepoSelect,
   error,
   isLoading,
 }) => {
   const [popoverOpen, setPopoverOpen] = React.useState(false);
+  const [tokenInput, setTokenInput] = React.useState(githubToken || '');
+  const [localTokenStatus, setLocalTokenStatus] = React.useState('');
+  const safeRepoInput = repoInput || '';
+
+  // Save token to localStorage and call onSaveToken
+  const handleSaveTokenClick = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('githubToken', tokenInput);
+    }
+    setLocalTokenStatus('Token saved!');
+    setTimeout(() => setLocalTokenStatus(''), 2000);
+    if (onSaveToken) onSaveToken(tokenInput);
+  };
 
   return (
     <ShadDialog open={open} onOpenChange={onOpenChange}>
       <ShadDialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Connect to Repository</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
-            Search and select a repository. GitHub authentication is handled by the extension.
+            Manage your GitHub authentication and repository connection.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-1 items-center gap-4"> 
-            <Label htmlFor="repoCombobox" className="sr-only"> 
-              Repository
-            </Label>
+          {/* --- GitHub Token Input --- */}
+          <div className="grid grid-cols-1 items-center gap-2 mb-2">
+            <Label className="text-sm font-medium text-foreground">GitHub Token</Label>
+            <Input
+              type="password"
+              value={tokenInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTokenInput(e.target.value)}
+              placeholder="Paste your GitHub Personal Access Token"
+              className="mt-1 bg-[hsl(var(--input))] text-foreground"
+            />
+            <Button
+              type="button"
+              className="mt-2 w-fit"
+              onClick={handleSaveTokenClick}
+              disabled={!tokenInput || !tokenInput.trim()}
+            >Save Token</Button>
+            {(tokenStatus || localTokenStatus) && <span className="ml-2 text-green-600 text-xs">{tokenStatus || localTokenStatus}</span>}
+          </div>
+          {/* --- Repo Selection --- */}
+          <div className="grid grid-cols-1 items-center gap-4">
+            <Label htmlFor="repoCombobox" className="sr-only">Repository</Label>
             <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -90,8 +127,8 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
                   className="w-full justify-between"
                   disabled={isFetchingUserRepos || isLoading}
                 >
-                  {repoInput
-                    ? userRepositories.find((repo) => repo.full_name === repoInput)?.full_name
+                  {safeRepoInput
+                    ? userRepositories.find((repo) => repo.full_name === safeRepoInput)?.full_name
                     : (isFetchingUserRepos ? "Loading repositories..." : "Select repository...")}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -106,16 +143,15 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
                         <CommandItem
                           key={repo.id}
                           value={repo.full_name}
-                          onSelect={(currentValue: string) => { // Explicitly type currentValue
-                            setRepoInput(currentValue === repoInput ? "" : currentValue);
-                            // onRepoSelect(currentValue); // Call onRepoSelect if still needed
+                          onSelect={(currentValue: string) => {
+                            setRepoInput(currentValue === safeRepoInput ? "" : currentValue);
                             setPopoverOpen(false);
                           }}
                         >
                           <Check
                             className={cn(
                               "mr-2 h-4 w-4",
-                              repoInput === repo.full_name ? "opacity-100" : "opacity-0"
+                              safeRepoInput === repo.full_name ? "opacity-100" : "opacity-0"
                             )}
                           />
                           {repo.full_name}
@@ -127,7 +163,6 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
               </PopoverContent>
             </Popover>
           </div>
-          
           {error && (
             <div className="col-span-4 text-red-500 text-sm p-2 bg-red-50 border border-red-200 rounded">
               {error}
