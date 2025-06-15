@@ -6,32 +6,20 @@ import fs from 'fs';
 
 const execAsync = promisify(exec);
 
-function findGitRoot(startDir = process.cwd()) {
-  let dir = startDir;
-  while (dir !== path.parse(dir).root) {
-    if (fs.existsSync(path.join(dir, '.git'))) {
-      return dir;
-    }
-    dir = path.dirname(dir);
-  }
-  return null;
-}
-
-const GIT_REPO_PATH = findGitRoot() || process.cwd();
-const GIT_EXISTS = fs.existsSync(path.join(GIT_REPO_PATH, '.git'));
-
 export async function POST(req: NextRequest) {
   try {
-    console.log('[GIT] Using CWD:', GIT_REPO_PATH);
-    console.log('[GIT] .git exists:', GIT_EXISTS);
-    console.log('[GIT] process.cwd():', process.cwd());
+    const { repoPath } = await req.json();
+    if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) {
+      return NextResponse.json({ success: false, message: 'Invalid or missing repoPath' }, { status: 400 });
+    }
+    console.log('[GIT] Using repoPath:', repoPath);
     // Check for unstaged changes
-    const { stdout: status } = await execAsync('git status --porcelain', { cwd: GIT_REPO_PATH });
+    const { stdout: status } = await execAsync('git status --porcelain', { cwd: repoPath });
     console.log('[GIT] git status --porcelain:', status);
     if (!status.trim()) {
       return NextResponse.json({ success: false, message: 'No unstaged changes to stage.' }, { status: 200 });
     }
-    const addResult = await execAsync('git add .', { cwd: GIT_REPO_PATH });
+    const addResult = await execAsync('git add .', { cwd: repoPath });
     console.log('[GIT] git add . result:', addResult);
     return NextResponse.json({ success: true, message: 'Changes staged.' });
   } catch (e: any) {

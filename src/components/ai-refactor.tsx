@@ -153,6 +153,9 @@ export function AiRefactor() {
     }
   };
 
+  // Hardcoded repo path for local testing. Replace with dynamic value in production/extension.
+  const [repoPath, setRepoPath] = useState<string>("C:\\Users\\snabi\\Downloads\\Compressed\\aichatbot");
+
   return (
     <ScrollArea className="h-full p-4">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -306,7 +309,11 @@ export function AiRefactor() {
                       disabled={isCommitting}
                       onClick={async () => {
                         try {
-                          const res = await fetch('/api/stage', { method: 'POST' });
+                          const res = await fetch('/api/stage', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ repoPath }),
+                          });
                           const data = await res.json();
                           if (data.success) {
                             toast({ title: '✅ Changes staged', description: data.message });
@@ -349,14 +356,15 @@ export function AiRefactor() {
                         <Button
                           onClick={async () => {
                             if (!pendingCommit) return;
-                            console.log('[AI] Commit dialog confirmed', { pendingCommit, autoPush });
+                            console.log('[AI] Commit dialog confirmed', { pendingCommit, autoPush, repoPath });
                             setIsCommitting(true);
                             try {
-                              const plainMsg = pendingCommit.replace(/[`*_~#>\[\]]/g, '').split('\n')[0].slice(0, 72);
+                              // Use the full AI commit message (subject + body)
+                              const plainMsg = pendingCommit.replace(/[`*_~#>\[\]]/g, '').trim();
                               const res = await fetch('/api/commit', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ message: plainMsg, autoPush }),
+                                body: JSON.stringify({ message: plainMsg, autoPush, repoPath }),
                               });
                               const data = await res.json();
                               console.log('[AI] Commit response', data);
