@@ -11,6 +11,7 @@ import { CodeChat } from './code-chat'; // Or the correct path
 import { AiRefactor } from './ai-refactor';
 import { Commit } from './WebviewMessenger'; // Assuming Commit type is here or imported appropriately
 import { Branch, Contributor } from '../types'; // Import Branch type and Contributor type
+import { useToast } from '@/hooks/use-toast';
 
 // Define ChatMessage interface directly in main-panel.tsx or import from a shared types file
 interface ChatMessage {
@@ -80,12 +81,41 @@ export function MainPanel({
   // console.log('[MainPanel - src/components/main-panel.tsx] Received selectedBranch:', selectedBranch);
   const [syncStatus, setSyncStatus] = React.useState<'idle' | 'syncing' | 'synced'>('synced');
   const [activeTab, setActiveTab] = useState('activity');
+  const [isPushing, setIsPushing] = useState(false);
+  const { toast } = useToast();
 
   const handleSync = () => {
     setSyncStatus('syncing');
     setTimeout(() => {
       setSyncStatus('synced');
     }, 2000);
+  };
+
+  const handlePushChanges = async () => {
+    setIsPushing(true);
+    try {
+      // Use the correct local repo path for telegram-chatbot
+      const repoPath = "C:\\Users\\snabi\\Downloads\\Compressed\\telegram-chatbot";
+      const res = await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoPath }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.alreadyUpToDate) {
+          toast({ title: 'No changes to push', description: 'Your branch is already up to date with remote.' });
+        } else {
+          toast({ title: '✅ Changes pushed to remote!', description: data.pushOut || 'Your changes have been pushed.' });
+        }
+      } else {
+        toast({ title: '❌ Push failed', description: data.message || 'Unknown error', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: '❌ Push failed', description: e.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setIsPushing(false);
+    }
   };
 
   return (
@@ -129,9 +159,9 @@ export function MainPanel({
             {syncStatus === 'idle' && <RefreshCw className="mr-2 h-4 w-4 text-primary" />}
             {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'synced' ? 'Synced' : 'Sync'}
           </Button>
-          <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handlePushChanges} disabled={isPushing}>
             <UploadCloud className="mr-2 h-4 w-4" />
-            Push Changes
+            {isPushing ? 'Pushing...' : 'Push Changes'}
           </Button>
         </div>
       </div>
