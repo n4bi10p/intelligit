@@ -48,6 +48,10 @@ interface MainPanelProps {
   currentUserName: string | null;
   repoOwner?: string; // Added
   repoName?: string; // Added
+  loadRepositoryData: (owner: string | null, repo: string | null, token: string, branch?: string | null, pageToLoad?: number) => Promise<void>;
+  currentRepoOwner: string | null;
+  currentRepoName: string | null;
+  githubToken: string | null;
 }
 
 export function MainPanel({ 
@@ -74,21 +78,46 @@ export function MainPanel({
   chatError,
   currentUserName,
   repoOwner,      // Destructure
-  repoName        // Destructure
+  repoName,        // Destructure
+  loadRepositoryData,
+  currentRepoOwner,
+  currentRepoName,
+  githubToken,
 }: MainPanelProps) { 
   // console.log('[MainPanel - src/components/main-panel.tsx] Received gitLog prop with length:', gitLog?.length);
   // console.log('[MainPanel - src/components/main-panel.tsx] Received branches:', branches);
   // console.log('[MainPanel - src/components/main-panel.tsx] Received selectedBranch:', selectedBranch);
-  const [syncStatus, setSyncStatus] = React.useState<'idle' | 'syncing' | 'synced'>('synced');
+  const [syncStatus, setSyncStatus] = React.useState<'idle' | 'syncing' | 'synced'>('idle');
   const [activeTab, setActiveTab] = useState('activity');
   const [isPushing, setIsPushing] = useState(false);
   const { toast } = useToast();
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setSyncStatus('syncing');
-    setTimeout(() => {
-      setSyncStatus('synced');
-    }, 2000);
+    try {
+      const repoPath = "C:\\Users\\snabi\\Downloads\\Compressed\\telegram-chatbot";
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoPath }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSyncStatus('synced');
+        toast({ title: 'Repository synced!', description: data.pullOut || 'Fetched and pulled latest changes.' });
+        // Refresh the activity feed after sync
+        if (currentRepoOwner && currentRepoName && githubToken) {
+          await loadRepositoryData(currentRepoOwner, currentRepoName, githubToken, selectedBranch, 1);
+        }
+        setTimeout(() => setSyncStatus('idle'), 2000);
+      } else {
+        setSyncStatus('idle');
+        toast({ title: '❌ Sync failed', description: data.message || 'Unknown error', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      setSyncStatus('idle');
+      toast({ title: '❌ Sync failed', description: e.message || 'Unknown error', variant: 'destructive' });
+    }
   };
 
   const handlePushChanges = async () => {
@@ -107,6 +136,10 @@ export function MainPanel({
           toast({ title: 'No changes to push', description: 'Your branch is already up to date with remote.' });
         } else {
           toast({ title: '✅ Changes pushed to remote!', description: data.pushOut || 'Your changes have been pushed.' });
+        }
+        // Refresh the activity feed after push
+        if (currentRepoOwner && currentRepoName && githubToken) {
+          await loadRepositoryData(currentRepoOwner, currentRepoName, githubToken, selectedBranch, 1);
         }
       } else {
         toast({ title: '❌ Push failed', description: data.message || 'Unknown error', variant: 'destructive' });

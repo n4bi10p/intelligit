@@ -1054,6 +1054,11 @@ useEffect(() => {
         isSendingChatMessage={isSendingMessage}
         chatError={chatError}
         currentUserName={githubUserName}
+        // Add these props for sync refresh
+        loadRepositoryData={loadRepositoryData}
+        currentRepoOwner={currentRepoOwner}
+        currentRepoName={currentRepoName}
+        githubToken={githubToken}
       />
 
       {/* Dialogs */}
