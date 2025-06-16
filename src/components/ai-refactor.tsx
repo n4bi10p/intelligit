@@ -255,19 +255,21 @@ export function AiRefactor() {
     <ScrollArea className="h-full p-4">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* --- Header with Settings --- */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-2">
           <h2 className="text-xl font-bold text-foreground">AI Assistant</h2>
-          <div className="flex gap-2 items-center">
-            <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary')}>
-              <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MODES.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex gap-2 items-center mt-4 sm:mt-0">
+            <div className="bg-card border border-border rounded-md shadow-md px-2 py-1">
+              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary')}>
+                <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground border-none shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODES.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
         {/* --- Settings Dialog --- */}

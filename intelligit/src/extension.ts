@@ -578,7 +578,7 @@ export async function activate(context: vscode.ExtensionContext) { // Made activ
                                 }
                                 currentWebview.postMessage({
                                     command: 'repositoryInfo',
-                                    name: repositoryName,
+                                    repositoryName, // Use the correct key expected by the webview
                                     branch: currentBranch,
                                     owner: determinedRepoOwner,
                                     error: repoInfoError
@@ -716,24 +716,44 @@ export async function activate(context: vscode.ExtensionContext) { // Made activ
                             // --- Firebase User Session Persistence ---
                             case 'saveUserSession': {
                                 const { userId, session } = message;
-                                if (userId && session) {
+                                // Only save session if it contains githubToken or API keys, not repo info
+                                if (userId && session && (session.githubToken || session.apiKey)) {
                                     await saveUserSessionToFirebase(userId, session);
                                     currentWebview.postMessage({ command: 'userSessionSaved', success: true });
                                 } else {
-                                    currentWebview.postMessage({ command: 'userSessionSaved', success: false, error: 'Missing userId or session.' });
+                                    currentWebview.postMessage({ command: 'userSessionSaved', success: false, error: 'Session missing githubToken or API key.' });
                                 }
                                 break;
                             }
                             case 'loadUserSession': {
                                 const { userId } = message;
                                 if (userId) {
-                                    const session = await loadUserSessionFromFirebase(userId);
-                                    currentWebview.postMessage({ command: 'userSessionLoaded', session });
+                                    // Only load session if a workspace is open
+                                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                                    if (!workspaceFolders || workspaceFolders.length === 0) {
+                                        // No workspace open, do not load previous repo session
+                                        currentWebview.postMessage({ command: 'userSessionLoaded', session: null });
+                                    } else {
+                                        const session = await loadUserSessionFromFirebase(userId);
+                                        currentWebview.postMessage({ command: 'userSessionLoaded', session });
+                                    }
                                 } else {
                                     currentWebview.postMessage({ command: 'userSessionLoaded', session: null, error: 'Missing userId.' });
                                 }
                                 break;
                             }
+                            case 'verifyGitHubToken':
+                                // New: verify token on demand from webview
+                                if (typeof message.token === 'string' && message.token.trim()) {
+                                    if (IntelliGitPanel.currentPanel) {
+                                        await sendGitHubUserInfo(IntelliGitPanel.currentPanel, message.token, context);
+                                    } else {
+                                        currentWebview.postMessage({ command: 'githubUserInfo', userInfo: null, error: 'No webview panel available.' });
+                                    }
+                                } else {
+                                    currentWebview.postMessage({ command: 'githubUserInfo', userInfo: null, error: 'No token provided.' });
+                                }
+                                break;
                         }
                     },
                     undefined,
@@ -860,11 +880,14 @@ export async function deactivate() { // Made deactivate async (good practice, th
  * @param userId string (GitHub login or email)
  * @param session { owner: string, name: string, branch?: string }
  */
-async function saveUserSessionToFirebase(userId: string, session: { owner: string, name: string, branch?: string }) {
+async function saveUserSessionToFirebase(userId: string, session: { githubLogin: string, githubToken: string }) {
   if (!db) { return; }
   try {
-    await db.collection('userSessions').doc(userId).set({ lastSession: session }, { merge: true });
-    console.log(`[IntelliGit] Saved user session for ${userId}:`, session);
+    await db.collection('userSessions').doc(userId).set({
+      githubLogin: session.githubLogin,
+      githubToken: session.githubToken
+    }, { merge: true });
+    console.log(`[IntelliGit] Saved GitHub login and token for ${userId}`);
   } catch (e) {
     console.error(`[IntelliGit] Failed to save user session for ${userId}:`, e);
   }

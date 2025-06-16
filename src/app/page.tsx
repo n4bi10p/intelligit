@@ -976,18 +976,25 @@ export default function CodeCollabAIPage() {
 
   // --- Save user session to extension (and Firebase) on repo/branch change ---
 useEffect(() => {
-  if (githubUserName && currentRepoOwner && currentRepoName && repositoryConnected) {
+  if (githubUserName && githubToken) {
     vscodeApiInstance.postMessage({
       command: 'saveUserSession',
       userId: githubUserName,
       session: {
-        owner: currentRepoOwner,
-        name: currentRepoName,
-        branch: selectedBranch || undefined
+        githubLogin: githubUserName,
+        githubToken: githubToken
       }
     });
   }
-}, [githubUserName, currentRepoOwner, currentRepoName, selectedBranch, repositoryConnected]);
+}, [githubUserName, githubToken]);
+
+  // If a repo is auto-detected from the workspace, set repoInput and clear userRepositories
+  useEffect(() => {
+    if (autoDetectedOwner && autoDetectedRepo) {
+      setRepoInput(`${autoDetectedOwner}/${autoDetectedRepo}`);
+      setUserRepositories([]); // Hide repo selection, show connected state
+    }
+  }, [autoDetectedOwner, autoDetectedRepo]);
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
