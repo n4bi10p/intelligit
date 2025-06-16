@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { SettingsDialog } from './SettingsDialog';
+import ReactMarkdown from 'react-markdown';
 
 // Types
 import { type CollaborativeRefactorOutput } from '@/ai/flows/collaborative-refactoring';
@@ -34,7 +35,7 @@ export function AiRefactor() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<CollaborativeRefactorOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'refactor' | 'commit-summary'>('refactor');
+  const [mode, setMode] = useState<'refactor' | 'commit-summary' | 'status-helper' | 'pr'>('refactor');
   const [commitDiff, setCommitDiff] = useState('');
   const [commitSummary, setCommitSummary] = useState('');
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
@@ -73,6 +74,8 @@ export function AiRefactor() {
   const MODES = [
     { value: 'refactor', label: 'Refactor Code' },
     { value: 'commit-summary', label: 'Commit Summary' },
+    { value: 'status-helper', label: 'Status Helper' },
+    { value: 'pr', label: 'Generate Pull Request' },
   ];
 
   const onSubmit = async (data: RefactorFormData) => {
@@ -244,6 +247,8 @@ export function AiRefactor() {
       setPrSuccess('Pull request created successfully!');
       setPrUrl(data.url || null);
       toast({ title: '✅ Pull request created', description: data.url ? `View PR: ${data.url}` : 'Success' });
+      // Instantly refresh PRs after PR creation
+      await refreshPrs();
     } catch (e) {
       setPrError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -251,15 +256,240 @@ export function AiRefactor() {
     }
   };
 
+  // --- Status Helper State ---
+  const [activeTab, setActiveTab] = useState<'refactor' | 'commit-summary' | 'status-helper'>('refactor');
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [gitStatusRaw, setGitStatusRaw] = useState('');
+  const [gitLogRaw, setGitLogRaw] = useState('');
+  const [statusExplanation, setStatusExplanation] = useState('');
+  const [statusSuggestions, setStatusSuggestions] = useState('');
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // --- Status Helper Handler ---
+  const handleCheckStatus = async () => {
+    setStatusLoading(true);
+    setStatusError(null);
+    setGitStatusRaw('');
+    setGitLogRaw('');
+    setStatusExplanation('');
+    setStatusSuggestions('');
+    try {
+      const response = await fetch('/api/git-status-helper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoPath }),
+      });
+      if (!response.ok) throw new Error('Failed to get git status');
+      const data = await response.json();
+      setGitStatusRaw(data.gitStatus || '');
+      setGitLogRaw(data.gitLog || '');
+      setStatusExplanation(data.explanation || '');
+      setStatusSuggestions(data.suggestions || '');
+    } catch (e) {
+      setStatusError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  // --- PR Review State ---
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  // --- PR Review Handler ---
+  const handleReviewPr = async () => {
+    setIsReviewing(true);
+    setReviewFeedback(null);
+    setReviewError(null);
+    try {
+      const response = await fetch('/api/pr-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoPath }),
+      });
+      if (!response.ok) throw new Error('Failed to get PR review');
+      const data = await response.json();
+      setReviewFeedback(data.feedback || 'No feedback returned.');
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  // --- Open PRs State ---
+  const [openPrs, setOpenPrs] = useState<any[]>([]);
+  const [isLoadingPrs, setIsLoadingPrs] = useState(false);
+  const [prActionLoading, setPrActionLoading] = useState<{ [pr: number]: string }>({});
+  const [prActionResult, setPrActionResult] = useState<{ [pr: number]: string }>({});
+
+  // --- PR Comments State ---
+  const [prComments, setPrComments] = useState<{ [prNumber: number]: any[] }>({});
+  const [isLoadingComments, setIsLoadingComments] = useState<{ [prNumber: number]: boolean }>({});
+
+  // --- PR Comment State ---
+  const [prComment, setPrComment] = useState<{ [prNumber: number]: string }>({});
+  const [isPostingComment, setIsPostingComment] = useState<{ [prNumber: number]: boolean }>({});
+  const [prCommentResult, setPrCommentResult] = useState<{ [prNumber: number]: string | null }>({});
+
+  // Helper to refresh PRs
+  const refreshPrs = async () => {
+    setIsLoadingPrs(true);
+    try {
+      const response = await fetch('/api/pr-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list', repoPath, githubToken }),
+      });
+      const data = await response.json();
+      setOpenPrs(Array.isArray(data.prs) ? data.prs : []);
+    } catch {
+      setOpenPrs([]);
+    } finally {
+      setIsLoadingPrs(false);
+    }
+  };
+
+  // --- Fetch PR Comments ---
+  const fetchPrComments = async (pr: any) => {
+    setIsLoadingComments(l => ({ ...l, [pr.number]: true }));
+    try {
+      // Add a cache-busting query param to avoid browser caching
+      const response = await fetch(`https://api.github.com/repos/${pr.base.repo.owner.login}/${pr.base.repo.name}/issues/${pr.number}/comments?cb=${Date.now()}`, {
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github+json',
+        },
+      });
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setPrComments(c => ({ ...c, [pr.number]: data }));
+      } else {
+        setPrComments(c => ({ ...c, [pr.number]: [] }));
+      }
+    } catch {
+      setPrComments(c => ({ ...c, [pr.number]: [] }));
+    } finally {
+      setIsLoadingComments(l => ({ ...l, [pr.number]: false }));
+    }
+  };
+
+  // Fetch open PRs when PR panel is shown
+  React.useEffect(() => {
+    if (mode === 'pr') {
+      refreshPrs();
+    }
+  }, [mode, repoPath, githubToken]);
+
+  // Fetch comments when PRs are loaded or when a comment is posted
+  React.useEffect(() => {
+    if (mode === 'pr' && openPrs.length > 0) {
+      openPrs.forEach(pr => fetchPrComments(pr));
+    }
+    // eslint-disable-next-line
+  }, [mode, openPrs, githubToken]);
+
+  // Merge PR handler
+  const handleMergePr = async (pr: any) => {
+    setPrActionLoading(l => ({ ...l, [pr.number]: 'merge' }));
+    setPrActionResult(r => ({ ...r, [pr.number]: '' }));
+    try {
+      const response = await fetch('/api/pr-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'merge',
+          owner: pr.base.repo.owner.login,
+          repo: pr.base.repo.name,
+          pull_number: pr.number,
+          githubToken,
+          commit_title: `Merge PR #${pr.number}: ${pr.title}`,
+        }),
+      });
+      const data = await response.json();
+      setPrActionResult(r => ({ ...r, [pr.number]: data.merged ? '✅ Merged!' : `❌ ${data.message || 'Failed to merge'}` }));
+      if (data.merged) {
+        setTimeout(() => refreshPrs(), 1000);
+      }
+    } catch (e: any) {
+      setPrActionResult(r => ({ ...r, [pr.number]: '❌ Merge failed' }));
+    } finally {
+      setPrActionLoading(l => ({ ...l, [pr.number]: '' }));
+    }
+  };
+
+  // Close PR handler
+  const handleClosePr = async (pr: any) => {
+    setPrActionLoading(l => ({ ...l, [pr.number]: 'close' }));
+    setPrActionResult(r => ({ ...r, [pr.number]: '' }));
+    try {
+      const response = await fetch('/api/pr-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'close',
+          owner: pr.base.repo.owner.login,
+          repo: pr.base.repo.name,
+          pull_number: pr.number,
+          githubToken,
+        }),
+      });
+      const data = await response.json();
+      setPrActionResult(r => ({ ...r, [pr.number]: data.closed ? '✅ Closed!' : `❌ ${data.message || 'Failed to close'}` }));
+      if (data.closed) {
+        setTimeout(() => refreshPrs(), 1000);
+      }
+    } catch (e: any) {
+      setPrActionResult(r => ({ ...r, [pr.number]: '❌ Close failed' }));
+    } finally {
+      setPrActionLoading(l => ({ ...l, [pr.number]: '' }));
+    }
+  };
+
+  // --- PR Comment Handler ---
+  const handlePostPrComment = async (pr: any) => {
+    setIsPostingComment(s => ({ ...s, [pr.number]: true }));
+    setPrCommentResult(r => ({ ...r, [pr.number]: null }));
+    try {
+      const response = await fetch('/api/pr-comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          owner: pr.base.repo.owner.login,
+          repo: pr.base.repo.name,
+          pull_number: pr.number,
+          githubToken,
+          comment: prComment[pr.number],
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setPrComment(c => ({ ...c, [pr.number]: '' }));
+        setPrCommentResult(r => ({ ...r, [pr.number]: '✅ Comment posted' }));
+        toast({ title: '✅ Comment posted', description: 'Your comment was added to the PR.' });
+        await fetchPrComments(pr); // Refresh comments after posting
+      } else {
+        setPrCommentResult(r => ({ ...r, [pr.number]: '❌ Failed to post comment' }));
+        toast({ title: '❌ Failed to post comment', description: data.error || 'Unknown error', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      setPrCommentResult(r => ({ ...r, [pr.number]: '❌ Failed to post comment' }));
+      toast({ title: '❌ Failed to post comment', description: e.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setIsPostingComment(s => ({ ...s, [pr.number]: false }));
+    }
+  };
+
   return (
     <ScrollArea className="h-full p-4">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* --- Header with Settings --- */}
+        {/* --- Header with Settings and Dropdown --- */}
         <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-2">
           <h2 className="text-xl font-bold text-foreground">AI Assistant</h2>
           <div className="flex gap-2 items-center mt-4 sm:mt-0">
             <div className="bg-card border border-border rounded-md shadow-md px-2 py-1">
-              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary')}>
+              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary' | 'status-helper' | 'pr')}>
                 <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground border-none shadow-none">
                   <SelectValue />
                 </SelectTrigger>
@@ -272,22 +502,53 @@ export function AiRefactor() {
             </div>
           </div>
         </div>
-        {/* --- Settings Dialog --- */}
-        <SettingsDialog
-          open={showSettings}
-          onOpenChange={setShowSettings}
-          githubToken={githubToken}
-          onSaveToken={handleSaveToken || (() => {})}
-          tokenStatus={tokenStatus}
-          repoInput={''} // TODO: Wire up real repo selection
-          setRepoInput={() => {}}
-          onConnect={() => {}}
-          userRepositories={[]}
-          isFetchingUserRepos={false}
-          onRepoSelect={() => {}}
-          error={null}
-          isLoading={false}
-        />
+        {/* --- Status Helper --- */}
+        {mode === 'status-helper' && (
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-foreground">Git Status Helper</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Label className="text-sm font-medium text-foreground">Repository Path</Label>
+                <Input
+                  value={repoPath}
+                  onChange={e => setRepoPath(e.target.value)}
+                  placeholder="Path to your local git repo"
+                  className="mt-1 bg-[hsl(var(--input))] text-foreground"
+                />
+              </div>
+              <Button type="button" onClick={handleCheckStatus} disabled={statusLoading || !repoPath.trim()} className="mb-4">
+                {statusLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Check Status'}
+              </Button>
+              {statusError && <p className="text-xs text-destructive mt-1">{statusError}</p>}
+              {gitStatusRaw && (
+                <div className="mb-2">
+                  <Label className="text-sm font-medium text-foreground">Raw Git Status</Label>
+                  <Textarea value={gitStatusRaw} readOnly className="mt-1 min-h-[80px] bg-[hsl(var(--input))] text-foreground font-mono" />
+                </div>
+              )}
+              {gitLogRaw && (
+                <div className="mb-2">
+                  <Label className="text-sm font-medium text-foreground">Latest Commit (git log -1)</Label>
+                  <Textarea value={gitLogRaw} readOnly className="mt-1 min-h-[60px] bg-[hsl(var(--input))] text-foreground font-mono" />
+                </div>
+              )}
+              {statusExplanation && (
+                <div className="mb-2">
+                  <Label className="text-sm font-medium text-primary">AI Explanation</Label>
+                  <div className="mt-1 p-3 rounded-md bg-muted text-foreground whitespace-pre-line">{statusExplanation}</div>
+                </div>
+              )}
+              {statusSuggestions && (
+                <div className="mb-2">
+                  <Label className="text-sm font-medium text-primary">Suggested Next Actions</Label>
+                  <div className="mt-1 p-3 rounded-md bg-muted text-foreground whitespace-pre-line">{statusSuggestions}</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
         {/* --- Refactor Code Mode --- */}
         {mode === 'refactor' && (
           <Card className="bg-card border-border">
@@ -520,13 +781,82 @@ export function AiRefactor() {
             </CardContent>
           </Card>
         )}
-        {/* --- PR Panel --- */}
-        {showPrPanel && (
+        {/* --- PR Panel (now in dropdown) --- */}
+        {mode === 'pr' && (
           <Card className="bg-card border-border mt-6">
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-primary">Generate Pull Request</CardTitle>
             </CardHeader>
             <CardContent>
+              {/* --- Open PRs List --- */}
+              <div className="mb-6">
+                <Label className="text-sm font-medium text-foreground">Open Pull Requests</Label>
+                {isLoadingPrs ? (
+                  <div className="mt-2 text-sm text-muted-foreground flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading PRs...</div>
+                ) : openPrs.length === 0 ? (
+                  <div className="mt-2 text-sm text-muted-foreground">No open pull requests found.</div>
+                ) : (
+                  <div className="space-y-2 mt-2">
+                    {openPrs.map(pr => (
+                      <div key={pr.number} className="border rounded p-2 bg-muted">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <span className="font-semibold">#{pr.number}</span> {pr.title}
+                            <span className="ml-2 text-xs text-muted-foreground">by {pr.user.login}</span>
+                          </div>
+                          <div className="flex gap-2 mt-2 sm:mt-0">
+                            <Button size="sm" variant="outline" disabled={!!prActionLoading[pr.number]} onClick={() => handleMergePr(pr)}>
+                              {prActionLoading[pr.number] === 'merge' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Merge PR'}
+                            </Button>
+                            <Button size="sm" variant="destructive" disabled={!!prActionLoading[pr.number]} onClick={() => handleClosePr(pr)}>
+                              {prActionLoading[pr.number] === 'close' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Close PR'}
+                            </Button>
+                          </div>
+                        </div>
+                        {/* --- PR Comments List --- */}
+                        <div className="mt-3">
+                          <Label className="text-xs font-medium text-foreground">Comments</Label>
+                          {isLoadingComments[pr.number] ? (
+                            <div className="text-xs text-muted-foreground flex items-center"><Loader2 className="mr-2 h-3 w-3 animate-spin" />Loading comments...</div>
+                          ) : prComments[pr.number] && prComments[pr.number].length > 0 ? (
+                            <div className="space-y-2 mt-1 max-h-40 overflow-y-auto">
+                              {prComments[pr.number].map((c: any) => (
+                                <div key={c.id} className="bg-background border rounded p-2 text-xs">
+                                  <div className="font-semibold text-foreground">{c.user.login}</div>
+                                  <div className="prose prose-xs text-foreground"><ReactMarkdown>{c.body}</ReactMarkdown></div>
+                                  <div className="text-muted-foreground mt-1">{new Date(c.created_at).toLocaleString()}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground mt-1">No comments yet.</div>
+                          )}
+                        </div>
+                        {/* --- PR Comment Box --- */}
+                        <div className="mt-3">
+                          <Label className="text-xs font-medium text-foreground">Add Comment</Label>
+                          <Textarea
+                            value={prComment[pr.number] || ''}
+                            onChange={e => setPrComment(c => ({ ...c, [pr.number]: e.target.value }))}
+                            placeholder="Write a comment for this PR (markdown supported)..."
+                            className="mt-1 min-h-[60px] bg-[hsl(var(--input))] text-foreground"
+                            disabled={isPostingComment[pr.number]}
+                          />
+                          <div className="flex items-center gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handlePostPrComment(pr)}
+                              disabled={isPostingComment[pr.number] || !(prComment[pr.number] && prComment[pr.number].trim())}
+                            >{isPostingComment[pr.number] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Post Comment'}</Button>
+                            {prCommentResult[pr.number] && <span className="text-xs ml-2">{prCommentResult[pr.number]}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* --- PR Title/Body/AI Review --- */}
               <div className="mb-2">
                 <Label className="text-sm font-medium text-foreground">PR Title</Label>
                 <Input
@@ -550,6 +880,30 @@ export function AiRefactor() {
                   disabled={isPrBodyLoading}
                 >{isPrBodyLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Generate PR Body with Gemini'}</Button>
               </div>
+              {/* --- AI Reviewer --- */}
+              <div className="mb-2">
+                <Button
+                  type="button"
+                  className="w-full mt-2"
+                  onClick={handleReviewPr}
+                  disabled={isReviewing}
+                >{isReviewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Review PR with AI'}</Button>
+                {reviewError && <p className="text-xs text-destructive mt-1">{reviewError}</p>}
+                {reviewFeedback && (
+                  <div className="mt-4 p-3 rounded-md bg-muted text-foreground">
+                    <Label className="text-sm font-medium text-primary mb-2">AI Review Feedback</Label>
+                    <div className="prose prose-sm max-w-none">
+                      <ReactMarkdown>{reviewFeedback}</ReactMarkdown>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => setPrBody(prBody ? prBody + '\n\n' + reviewFeedback : reviewFeedback)}
+                    >Copy to PR</Button>
+                  </div>
+                )}
+              </div>
               {prError && <p className="text-xs text-destructive mt-1">{prError}</p>}
               {prSuccess && <p className="text-xs text-green-600 mt-1">{prSuccess} {prUrl && (<a href={prUrl} target="_blank" rel="noopener noreferrer" className="underline ml-2">View PR</a>)}</p>}
               <Button
@@ -558,12 +912,6 @@ export function AiRefactor() {
                 onClick={handleCreatePr}
                 disabled={isCreatingPr || !prTitle.trim() || !prBody.trim()}
               >{isCreatingPr ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Pull Request'}</Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2"
-                onClick={() => setShowPrPanel(false)}
-              >Cancel</Button>
             </CardContent>
           </Card>
         )}
