@@ -35,7 +35,7 @@ export function AiRefactor() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<CollaborativeRefactorOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'refactor' | 'commit-summary' | 'status-helper' | 'pr' | 'changelog'>('refactor');
+  const [mode, setMode] = useState<'refactor' | 'commit-summary' | 'status-helper' | 'pr' | 'changelog' | 'readme'>('refactor');
   const [commitDiff, setCommitDiff] = useState('');
   const [commitSummary, setCommitSummary] = useState('');
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
@@ -76,7 +76,8 @@ export function AiRefactor() {
     { value: 'commit-summary', label: 'Commit Summary' },
     { value: 'status-helper', label: 'Status Helper' },
     { value: 'pr', label: 'Generate Pull Request' },
-    { value: 'changelog', label: 'Changelog Generator' }, // NEW
+    { value: 'changelog', label: 'Changelog Generator' },
+    { value: 'readme', label: 'README.md Generator' }, // NEW
   ];
 
   const onSubmit = async (data: RefactorFormData) => {
@@ -567,6 +568,109 @@ export function AiRefactor() {
     );
   }
 
+  // --- README Generator Component ---
+  function ReadmeGenerator() {
+    const [markdown, setMarkdown] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState('');
+    const [showPrompt, setShowPrompt] = useState(false);
+    const [userDescription, setUserDescription] = useState('');
+
+    const generateReadme = async () => {
+      setLoading(true);
+      setError(null);
+      setMarkdown('');
+      try {
+        const res = await fetch('/api/generate-readme', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userDescription, repoPath }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.markdown) throw new Error(data.error || 'Failed to generate README');
+        setMarkdown(data.markdown);
+        setEditValue(data.markdown);
+      } catch (e: any) {
+        setError(e.message || 'Unknown error');
+      } finally {
+        setLoading(false);
+        setShowPrompt(false);
+      }
+    };
+
+    return (
+      <div>
+        <Button onClick={() => setShowPrompt(true)} disabled={loading} className="mb-4">
+          {loading ? 'Generating...' : '📝 Generate README'}
+        </Button>
+        {showPrompt && (
+          <Dialog open={showPrompt} onOpenChange={setShowPrompt}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Describe your project (optional)</DialogTitle>
+              </DialogHeader>
+              <Input
+                value={userDescription}
+                onChange={e => setUserDescription(e.target.value)}
+                placeholder="Describe your project in 1 sentence (optional)"
+                className="mb-2"
+              />
+              <DialogFooter>
+                <Button onClick={generateReadme} disabled={loading}>
+                  {loading ? 'Generating...' : 'Generate'}
+                </Button>
+                <Button variant="outline" onClick={() => setShowPrompt(false)}>Cancel</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+        {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+        {markdown && !isEditing && (
+          <div className="mt-4">
+            <Label className="text-sm font-medium text-foreground">README Preview (Markdown)</Label>
+            <Textarea value={markdown} readOnly className="mt-1 min-h-[200px] bg-[hsl(var(--input))] text-foreground font-mono" />
+            <div className="flex gap-2 mt-2">
+              <Button type="button" onClick={() => navigator.clipboard.writeText(markdown)}>📋 Copy</Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/generate-readme', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ markdown, repoPath }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      toast({ title: '✅ Saved as README.md', description: `Saved to: ${data.path}` });
+                    } else {
+                      toast({ title: '❌ Failed to save', description: data.error || 'Unknown error', variant: 'destructive' });
+                    }
+                  } catch (e: any) {
+                    toast({ title: '❌ Failed to save', description: e.message || 'Unknown error', variant: 'destructive' });
+                  }
+                }}
+              >💾 Save as README.md</Button>
+              <Button type="button" onClick={() => setIsEditing(true)}>✏️ Edit</Button>
+            </div>
+          </div>
+        )}
+        {isEditing && (
+          <div className="mt-4">
+            <Label className="text-sm font-medium text-foreground">Edit README</Label>
+            <Textarea value={editValue} onChange={e => setEditValue(e.target.value)} className="mt-1 min-h-[200px] bg-[hsl(var(--input))] text-foreground font-mono" />
+            <div className="flex gap-2 mt-2">
+              <Button type="button" onClick={() => { setMarkdown(editValue); setIsEditing(false); }}>💾 Save</Button>
+              <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <ScrollArea className="h-full p-4">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -575,7 +679,7 @@ export function AiRefactor() {
           <h2 className="text-xl font-bold text-foreground">AI Assistant</h2>
           <div className="flex gap-2 items-center mt-4 sm:mt-0">
             <div className="bg-card border border-border rounded-md shadow-md px-2 py-1">
-              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary' | 'status-helper' | 'pr' | 'changelog')}>
+              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary' | 'status-helper' | 'pr' | 'changelog' | 'readme')}>
                 <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground border-none shadow-none">
                   <SelectValue />
                 </SelectTrigger>
@@ -1009,6 +1113,17 @@ export function AiRefactor() {
             </CardHeader>
             <CardContent>
               <ChangelogGenerator />
+            </CardContent>
+          </Card>
+        )}
+        {/* --- README Generator Mode --- */}
+        {mode === 'readme' && (
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-primary">README.md Generator</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ReadmeGenerator />
             </CardContent>
           </Card>
         )}
