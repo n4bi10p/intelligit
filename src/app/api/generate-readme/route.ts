@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
+import * as fs from 'fs';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
@@ -49,7 +50,21 @@ async function getGeminiReadme(prompt: string): Promise<string> {
 export async function POST(req: NextRequest) {
   try {
     const { userDescription, repoPath } = await req.json();
-    const root = repoPath || process.cwd();
+    const root = repoPath || (() => {
+      try {
+        // @ts-ignore
+        const vscode = require('vscode');
+        return vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
+      } catch {
+        return undefined;
+      }
+    })();
+    if (!root) {
+      return NextResponse.json({ error: 'No workspace is open. Please open a folder in VS Code to use IntelliGit features.' }, { status: 400 });
+    }
+    if (!fs.existsSync(path.join(root, '.git'))) {
+      return NextResponse.json({ error: 'The selected folder is not a Git repository.' }, { status: 400 });
+    }
     // Read package.json
     let pkg = {};
     try {
@@ -77,7 +92,7 @@ export async function POST(req: NextRequest) {
     const markdown = await getGeminiReadme(prompt);
     return NextResponse.json({ markdown });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Failed to generate README', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to generate README', message: 'An error occurred while generating the README. Please try again later.' }, { status: 500 });
   }
 }
 
@@ -92,6 +107,6 @@ export async function PUT(req: NextRequest) {
     writeFileSync(readmePath, markdown, 'utf8');
     return NextResponse.json({ success: true, path: readmePath });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Failed to save README.md', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to save README.md', message: 'Could not save README.md. Please check your permissions and try again.' }, { status: 500 });
   }
 }

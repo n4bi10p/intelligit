@@ -2,7 +2,7 @@
   "name": "intelligit",
   "displayName": "IntelliGit",
   "description": "An intelligent assistant for Git and GitHub workflows.",
-  "publisher": "intelligit-dev",
+  "publisher": "Rootables",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.80.0"

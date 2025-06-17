@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
 import path from 'path';
+import * as fs from 'fs';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
@@ -55,7 +56,22 @@ export async function GET(req: NextRequest) {
   try {
     // Get repoPath from query param, fallback to process.cwd()
     const { searchParams } = new URL(req.url);
-    const repoPath = searchParams.get('repoPath') || process.cwd();
+    let repoPath = searchParams.get('repoPath');
+    if (!repoPath) {
+      // Try to resolve from VS Code workspace if running in extension context
+      try {
+        // @ts-ignore
+        const vscode = require('vscode');
+        repoPath = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
+      } catch {}
+    }
+    if (!repoPath) {
+      return NextResponse.json({ error: 'No workspace is open. Please open a folder in VS Code to use IntelliGit features.' }, { status: 400 });
+    }
+    // Validate it's a git repo
+    if (!fs.existsSync(path.join(repoPath, '.git'))) {
+      return NextResponse.json({ error: 'The selected folder is not a Git repository.' }, { status: 400 });
+    }
 
     // Get last 20 commit messages (excluding merges)
     const log = execSync('git log --pretty=format:"%s" --no-merges -n 20', { cwd: repoPath })
@@ -83,7 +99,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ markdown: md.trim(), aiSummary });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Failed to generate changelog', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to generate changelog', message: 'An error occurred while generating the changelog. Please try again later.' }, { status: 500 });
   }
 }
 
@@ -97,6 +113,6 @@ export async function POST(req: NextRequest) {
     writeFileSync(changelogPath, markdown, 'utf8');
     return NextResponse.json({ success: true, path: changelogPath });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Failed to save CHANGELOG.md', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to save CHANGELOG.md', message: 'Could not save CHANGELOG.md. Please check your permissions and try again.' }, { status: 500 });
   }
 }

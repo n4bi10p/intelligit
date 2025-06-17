@@ -2,24 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
-import fs from 'fs';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 
 export async function POST(req: NextRequest) {
   try {
     const { repoPath } = await req.json();
-    if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) {
-      return NextResponse.json({ success: false, message: 'Invalid or missing repoPath' }, { status: 400 });
+    let resolvedRepoPath = repoPath;
+    if (!resolvedRepoPath) {
+      try {
+        // @ts-ignore
+        const vscode = require('vscode');
+        resolvedRepoPath = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
+      } catch {}
     }
-    console.log('[GIT] Using repoPath:', repoPath);
+    if (!resolvedRepoPath) {
+      return NextResponse.json({ success: false, message: 'No workspace is open. Please open a folder in VS Code to use IntelliGit features.' }, { status: 400 });
+    }
+    if (!fs.existsSync(path.join(resolvedRepoPath, '.git'))) {
+      return NextResponse.json({ success: false, message: 'The selected folder is not a Git repository.' }, { status: 400 });
+    }
+    console.log('[GIT] Using repoPath:', resolvedRepoPath);
     // Check for unstaged changes
-    const { stdout: status } = await execAsync('git status --porcelain', { cwd: repoPath });
+    const { stdout: status } = await execAsync('git status --porcelain', { cwd: resolvedRepoPath });
     console.log('[GIT] git status --porcelain:', status);
     if (!status.trim()) {
       return NextResponse.json({ success: false, message: 'No unstaged changes to stage.' }, { status: 200 });
     }
-    const addResult = await execAsync('git add .', { cwd: repoPath });
+    const addResult = await execAsync('git add .', { cwd: resolvedRepoPath });
     console.log('[GIT] git add . result:', addResult);
     return NextResponse.json({ success: true, message: 'Changes staged.' });
   } catch (e: any) {

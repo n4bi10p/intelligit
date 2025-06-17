@@ -2,3 +2,4 @@
 config/firebaseServiceAccountKey.json
 /node_modules
 /out
+.vscodeignore

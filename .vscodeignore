@@ -46,4 +46,3 @@ firebase-debug.log
 firestore-debug.log
 config/firebaseServiceAccountKey.json
 .env.local
-.vscodeignore

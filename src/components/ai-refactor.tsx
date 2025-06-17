@@ -81,7 +81,6 @@ export function AiRefactor() {
   ];
 
   const onSubmit = async (data: RefactorFormData) => {
-    console.log('[AI] onSubmit called', data);
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -102,7 +101,6 @@ export function AiRefactor() {
       });
       if (!response.ok) throw new Error("Failed to fetch suggestion");
       const resultData: CollaborativeRefactorOutput = await response.json();
-      console.log('[AI] Refactor suggestion response', resultData);
       setResult({ ...resultData, aiProviderName: "gemini" });
       toast({
         title: `Suggestion Generated`,
@@ -110,11 +108,11 @@ export function AiRefactor() {
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error occurred.";
-      setError(message);
+      setError('Failed to fetch suggestion. Please try again later.');
       console.error('[AI] Error generating refactor suggestion', e);
       toast({
         title: "Error Generating Suggestion",
-        description: message,
+        description: 'Failed to fetch suggestion. Please try again later.',
         variant: "destructive",
       });
     } finally {
@@ -124,7 +122,6 @@ export function AiRefactor() {
 
   // --- Commit Summary Handler ---
   const handleGenerateSummary = async () => {
-    console.log('[AI] handleGenerateSummary called', { commitDiff });
     setIsSummaryLoading(true);
     setSummaryError(null);
     setCommitSummary('');
@@ -160,13 +157,12 @@ export function AiRefactor() {
       });
       if (!response.ok) throw new Error('Failed to generate summary');
       const data = await response.json();
-      console.log('[AI] Commit summary response', data);
       // Escape HTML/JS for safety
       const safeSummary = (data.summary || '').replace(/[<>]/g, (c: string) => c === '<' ? '&lt;' : '&gt;');
       setCommitSummary(safeSummary);
     } catch (e) {
       console.error('[AI] Error generating summary', e);
-      setSummaryError(e instanceof Error ? e.message : 'Unknown error');
+      setSummaryError('Failed to generate summary. Please try again later.');
     } finally {
       setIsSummaryLoading(false);
     }
@@ -200,7 +196,7 @@ export function AiRefactor() {
       const data = await response.json();
       setPrBody(data.summary || '');
     } catch (e) {
-      setPrError(e instanceof Error ? e.message : 'Unknown error');
+      setPrError('Failed to generate PR body. Please try again later.');
     } finally {
       setIsPrBodyLoading(false);
     }
@@ -252,7 +248,7 @@ export function AiRefactor() {
       // Instantly refresh PRs after PR creation
       await refreshPrs();
     } catch (e) {
-      setPrError(e instanceof Error ? e.message : 'Unknown error');
+      setPrError('Failed to create PR. Please try again later.');
     } finally {
       setIsCreatingPr(false);
     }
@@ -288,7 +284,7 @@ export function AiRefactor() {
       setStatusExplanation(data.explanation || '');
       setStatusSuggestions(data.suggestions || '');
     } catch (e) {
-      setStatusError(e instanceof Error ? e.message : 'Unknown error');
+      setStatusError('Failed to get git status. Please try again later.');
     } finally {
       setStatusLoading(false);
     }
@@ -314,7 +310,7 @@ export function AiRefactor() {
       const data = await response.json();
       setReviewFeedback(data.feedback || 'No feedback returned.');
     } catch (e) {
-      setReviewError(e instanceof Error ? e.message : 'Unknown error');
+      setReviewError('Failed to get PR review. Please try again later.');
     } finally {
       setIsReviewing(false);
     }
@@ -506,7 +502,7 @@ export function AiRefactor() {
         setEditValue(data.markdown);
         setAiSummary(data.aiSummary || '');
       } catch (e: any) {
-        setError(e.message || 'Unknown error');
+        setError('Failed to generate changelog. Please try again later.');
       } finally {
         setLoading(false);
       }
@@ -593,7 +589,7 @@ export function AiRefactor() {
         setMarkdown(data.markdown);
         setEditValue(data.markdown);
       } catch (e: any) {
-        setError(e.message || 'Unknown error');
+        setError('Failed to generate README. Please try again later.');
       } finally {
         setLoading(false);
         setShowPrompt(false);
