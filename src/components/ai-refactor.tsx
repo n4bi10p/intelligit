@@ -35,7 +35,7 @@ export function AiRefactor() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<CollaborativeRefactorOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'refactor' | 'commit-summary' | 'status-helper' | 'pr'>('refactor');
+  const [mode, setMode] = useState<'refactor' | 'commit-summary' | 'status-helper' | 'pr' | 'changelog'>('refactor');
   const [commitDiff, setCommitDiff] = useState('');
   const [commitSummary, setCommitSummary] = useState('');
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
@@ -76,6 +76,7 @@ export function AiRefactor() {
     { value: 'commit-summary', label: 'Commit Summary' },
     { value: 'status-helper', label: 'Status Helper' },
     { value: 'pr', label: 'Generate Pull Request' },
+    { value: 'changelog', label: 'Changelog Generator' }, // NEW
   ];
 
   const onSubmit = async (data: RefactorFormData) => {
@@ -481,6 +482,91 @@ export function AiRefactor() {
     }
   };
 
+  // --- Changelog Generator Component ---
+  function ChangelogGenerator() {
+    const [markdown, setMarkdown] = useState('');
+    const [aiSummary, setAiSummary] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState('');
+
+    const generateChangelog = async () => {
+      setLoading(true);
+      setError(null);
+      setMarkdown('');
+      setAiSummary('');
+      try {
+        // Pass repoPath as query param
+        const res = await fetch(`/api/changelog?repoPath=${encodeURIComponent(repoPath)}`);
+        const data = await res.json();
+        if (!res.ok || !data.markdown) throw new Error(data.error || 'Failed to generate changelog');
+        setMarkdown(data.markdown);
+        setEditValue(data.markdown);
+        setAiSummary(data.aiSummary || '');
+      } catch (e: any) {
+        setError(e.message || 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div>
+        <Button onClick={generateChangelog} disabled={loading} className="mb-4">
+          {loading ? 'Generating...' : 'Generate Changelog'}
+        </Button>
+        {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+        {aiSummary && (
+          <div className="mb-4 p-3 bg-muted rounded">
+            <Label className="text-sm font-medium text-primary">AI Summary</Label>
+            <div className="mt-1 text-foreground whitespace-pre-line">{aiSummary}</div>
+          </div>
+        )}
+        {markdown && !isEditing && (
+          <div className="mt-4">
+            <Label className="text-sm font-medium text-foreground">Changelog Preview (Markdown)</Label>
+            <Textarea value={markdown} readOnly className="mt-1 min-h-[200px] bg-[hsl(var(--input))] text-foreground font-mono" />
+            <div className="flex gap-2 mt-2">
+              <Button type="button" onClick={() => navigator.clipboard.writeText(markdown)}>📋 Copy</Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/changelog', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ markdown, repoPath }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      toast({ title: '✅ Saved as CHANGELOG.md', description: `Saved to: ${data.path}` });
+                    } else {
+                      toast({ title: '❌ Failed to save', description: data.error || 'Unknown error', variant: 'destructive' });
+                    }
+                  } catch (e: any) {
+                    toast({ title: '❌ Failed to save', description: e.message || 'Unknown error', variant: 'destructive' });
+                  }
+                }}
+              >💾 Save as CHANGELOG.md</Button>
+              <Button type="button" onClick={() => setIsEditing(true)}>✏️ Edit</Button>
+            </div>
+          </div>
+        )}
+        {isEditing && (
+          <div className="mt-4">
+            <Label className="text-sm font-medium text-foreground">Edit Changelog</Label>
+            <Textarea value={editValue} onChange={e => setEditValue(e.target.value)} className="mt-1 min-h-[200px] bg-[hsl(var(--input))] text-foreground font-mono" />
+            <div className="flex gap-2 mt-2">
+              <Button type="button" onClick={() => { setMarkdown(editValue); setIsEditing(false); }}>💾 Save</Button>
+              <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <ScrollArea className="h-full p-4">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -489,7 +575,7 @@ export function AiRefactor() {
           <h2 className="text-xl font-bold text-foreground">AI Assistant</h2>
           <div className="flex gap-2 items-center mt-4 sm:mt-0">
             <div className="bg-card border border-border rounded-md shadow-md px-2 py-1">
-              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary' | 'status-helper' | 'pr')}>
+              <Select value={mode} onValueChange={v => setMode(v as 'refactor' | 'commit-summary' | 'status-helper' | 'pr' | 'changelog')}>
                 <SelectTrigger className="w-48 bg-[hsl(var(--input))] text-foreground border-none shadow-none">
                   <SelectValue />
                 </SelectTrigger>
@@ -912,6 +998,17 @@ export function AiRefactor() {
                 onClick={handleCreatePr}
                 disabled={isCreatingPr || !prTitle.trim() || !prBody.trim()}
               >{isCreatingPr ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Pull Request'}</Button>
+            </CardContent>
+          </Card>
+        )}
+        {/* --- Changelog Generator Mode --- */}
+        {mode === 'changelog' && (
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-primary">Changelog Generator</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChangelogGenerator />
             </CardContent>
           </Card>
         )}
